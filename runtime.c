@@ -207,7 +207,8 @@ static void Exec(commandT* cmd, bool forceFork)
   //If the process that is running is the child, execute the comand
   else if (childPid == 0)
   {
-    execvp(cmd->argv[0],cmd->argv);
+    execv(cmd->name,cmd->argv);
+    fprintf(stderr, "%s\n", "command not found");
     exit(0);
   }
   //If the process that is running is the parent, wait for the child to finish
