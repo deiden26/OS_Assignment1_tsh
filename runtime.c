@@ -195,6 +195,26 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 static void Exec(commandT* cmd, bool forceFork)
 {
+  //Create a copy of the current state
+  pid_t childPid = fork();
+
+  //If there was an error when creating the child process
+  if (childPid == -1)
+  {
+    fprintf(stderr, "%s\n", "There was a fork error when executing your command");
+    exit(1);
+  }
+  //If the process that is running is the child, execute the comand
+  else if (childPid == 0)
+  {
+    execvp(cmd->argv[0],cmd->argv);
+    exit(0);
+  }
+  //If the process that is running is the parent, wait for the child to finish
+  else
+  {
+    waitpid(childPid,0,0);
+  }
 }
 
 static bool IsBuiltIn(char* cmd)
