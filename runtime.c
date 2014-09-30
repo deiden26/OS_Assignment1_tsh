@@ -231,12 +231,33 @@ static void Exec(commandT* cmd, bool forceFork)
 
 static bool IsBuiltIn(char* cmd)
 {
-  return FALSE;     
+  if (strncmp(cmd, "bg", 2) == 0)
+    return TRUE;
+
+  else if (strncmp(cmd, "fg", 2) == 0) 
+    return TRUE;
+
+  else if (strncmp(cmd, "jobs", 4) == 0)
+    return TRUE;
+
+  else
+    return FALSE;
 }
 
 
 static void RunBuiltInCmd(commandT* cmd)
 {
+  if (strncmp(cmd->argv[0], "bg", 2) == 0)
+    fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
+
+  else if (strncmp(cmd->argv[0], "fg", 2) == 0) 
+    fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
+
+  else if (strncmp(cmd->argv[0], "jobs", 4) == 0)
+    PrintBgJobList();
+  
+  else
+    fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
 }
 
 void CheckJobs()
