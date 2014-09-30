@@ -266,11 +266,21 @@ void CheckJobs()
 //Print the list of background jobs (bgJobs)
 static void PrintBgJobList()
 {
-  bgjobL *bgJob = bgjobs;
-  while (bgJob != NULL)
+  if (bgjobs == NULL)
+    fprintf(stdout, "There are no background jobs\n");
+  else
   {
-    fprintf(stdout, "%d\n", bgJob->pid);
-    bgJob = bgJob->next;
+    fprintf(stdout, "Background jobs in order of recency:\n");
+    fprintf(stdout, "|%-10s|%-10s|\n","Order","PID");
+    fprintf(stdout, "|----------|----------|\n");
+    bgjobL *bgJob = bgjobs;
+    int counter = 1;
+    while (bgJob != NULL)
+    {
+      fprintf(stdout, "|%-10d|%-10d|\n", counter, bgJob->pid);
+      bgJob = bgJob->next;
+      counter++;
+    }
   }
 }
 //Add new background job to the front of the background jobs list (bgJobs)
