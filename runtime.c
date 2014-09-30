@@ -70,7 +70,7 @@ typedef struct bgjob_l {
 } bgjobL;
 
 /* the pids of the background processes */
-bgjobL *bgjobs = NULL;
+ bgjobL *bgjobs = NULL;
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -85,6 +85,10 @@ static void Exec(commandT*, bool);
 static void RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool IsBuiltIn(char*);
+/* Adds new background job to the list of background jobs */
+static void AddBgJobToList(pid_t jobId);
+/* Print the list of background jobs (bgJobs) */
+static void PrintBgJobList();
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -214,7 +218,14 @@ static void Exec(commandT* cmd, bool forceFork)
   //If the process that is running is the parent, wait for the child to finish
   else
   {
-    waitpid(childPid,0,0);
+    //Test for background job (bg in command is set to 1)
+    if (cmd->bg == 1)
+    {
+      fprintf(stdout, "Process:%s PID:%d running in background\n", cmd->argv[0],childPid);
+      AddBgJobToList(childPid);
+    }
+    else
+      waitpid(childPid,0,0);
   }
 }
 
@@ -231,7 +242,28 @@ static void RunBuiltInCmd(commandT* cmd)
 void CheckJobs()
 {
 }
-
+//Print the list of background jobs (bgJobs)
+static void PrintBgJobList()
+{
+  bgjobL *bgJob = bgjobs;
+  while (bgJob != NULL)
+  {
+    fprintf(stdout, "%d\n", bgJob->pid);
+    bgJob = bgJob->next;
+  }
+}
+//Add new background job to the front of the background jobs list (bgJobs)
+static void AddBgJobToList(pid_t jobId)
+{
+  //Allocate memory for the new background job
+  bgjobL *newJob = malloc(sizeof(bgjobL));
+  //Fill in PID for new background job
+  newJob->pid = jobId;
+  //Make new background job point to the head of the background jobs list
+  newJob->next = bgjobs;
+  //Make the new job the head of the background jobs list
+  bgjobs = newJob;
+}
 
 commandT* CreateCmdT(int n)
 {
