@@ -91,6 +91,8 @@ static void AddBgJobToList(pid_t jobId);
 static void RemoveBgJobFromList(pid_t jobId);
 /* Print the list of background jobs (bgJobs) */
 static void PrintBgJobList();
+/* Catch signials from child processes and reap zombie processes */
+static void sigchld_handler();
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -201,6 +203,8 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 static void Exec(commandT* cmd, bool forceFork)
 {
+  //Initialize the SIGCHLD catcher
+  signal (SIGCHLD, sigchld_handler);
   //Create a copy of the current state
   pid_t childPid = fork();
 
@@ -270,32 +274,28 @@ static void RunBuiltInCmd(commandT* cmd)
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
 }
 
-void CheckJobs()
+// Catch signials from child processes and reap zombie processes
+static void sigchld_handler()
 {
   //Initialize variables
-  bgjobL *bgJob = bgjobs;
-  bgjobL *bgJobToDelete = NULL;
+  pid_t childPid;
   int status = 0;
-  //Iterate through the linked list of background jobs
-  while (bgJob != NULL)
+  //Check the status of all background jobs and clean up jobs that are finished (waitpid does the cleaning)
+   while ((childPid = waitpid(-1, &status, WNOHANG)) > 0)
   {
-    //Check status of the background job and clean up the job if it is finished
-    waitpid(bgJob->pid, &status, WNOHANG);
     //If the job is finished...
     if (WIFEXITED(status) || WIFSIGNALED(status))
     {
-      //Remember the job to delete by assigning its pointer to a different variable
-      bgJobToDelete = bgJob;
-      //Advance to the next node in the list
-      bgJob = bgJob->next;
       //Remove the finished job
-      RemoveBgJobFromList(bgJobToDelete->pid);
+      RemoveBgJobFromList(childPid);
     }
-    else
-      //Advance to the next node in the list
-      bgJob = bgJob->next;
   }
 }
+
+void CheckJobs()
+{
+}
+
 //Print the list of background jobs (bgJobs)
 static void PrintBgJobList()
 {
@@ -350,7 +350,7 @@ static void RemoveBgJobFromList(pid_t jobId)
         if (job == bgjobs)
           //Make the head of the linked list point to the next node
           bgjobs = job->next;
-        
+
         //If the job to be deleted is in the middle or at the end of the linked list...
         else
           //Remove the job to be delted from the list by making the node that points to it point to

@@ -71,8 +71,6 @@ int main (int argc, char *argv[])
 
   while (!forceExit) /* repeat forever */
   {
-    /* checks the status of background jobs & reap zombies */
-    CheckJobs();
 
     /* read command line */
     getCommandLine(&cmdLine, BUFSIZE);
@@ -83,6 +81,9 @@ int main (int argc, char *argv[])
       continue;
     }
 
+    /* checks the status of background jobs */
+    CheckJobs();
+    
     /* interpret command and line
      * includes executing of commands */
     Interpret(cmdLine);
