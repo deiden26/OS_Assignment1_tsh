@@ -215,20 +215,26 @@ static void Exec(commandT* cmd, bool forceFork)
     fprintf(stderr, "%s\n", "command not found");
     exit(0);
   }
-  //If the process that is running is the parent, wait for the child to finish
+  //If the process that is running is the parent...
   else
   {
-    //Test for background job (bg in command is set to 1)
+    //If the command is for a background job (bg in command is set to 1)...
     if (cmd->bg == 1)
     {
+      //Print notification of the process being run in the background
       fprintf(stdout, "Process:%s PID:%d running in background\n", cmd->argv[0],childPid);
+      //Add the job to the background job list (bgjobs)
       AddBgJobToList(childPid);
+      //Do NOT tell the parent process to wait
     }
+    //If the command is NOT for a background job (bg in command is set to 0)...
     else
+      //wait for the child to finish
       waitpid(childPid,0,0);
   }
 }
 
+//Test to see if command needs to be executed by the shell itself
 static bool IsBuiltIn(char* cmd)
 {
   if (strncmp(cmd, "bg", 2) == 0)
@@ -244,15 +250,16 @@ static bool IsBuiltIn(char* cmd)
     return FALSE;
 }
 
-
+//Run commands that are built-in shell functions
 static void RunBuiltInCmd(commandT* cmd)
 {
+  //Send SIGCONT to a backgrounded job, but do not give it the foreground 
   if (strncmp(cmd->argv[0], "bg", 2) == 0)
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
-
+  //Return a backgrounded job to the foreground 
   else if (strncmp(cmd->argv[0], "fg", 2) == 0) 
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
-
+  //Print the list of background jobs (bgJobs)
   else if (strncmp(cmd->argv[0], "jobs", 4) == 0)
     PrintBgJobList();
   
@@ -266,15 +273,20 @@ void CheckJobs()
 //Print the list of background jobs (bgJobs)
 static void PrintBgJobList()
 {
+  //Test for there being no background jobs
   if (bgjobs == NULL)
     fprintf(stdout, "There are no background jobs\n");
+  //If there are background jobs, print them in a list
   else
   {
+    //Print the top the the table
     fprintf(stdout, "Background jobs in order of recency:\n");
     fprintf(stdout, "|%-10s|%-10s|\n","Order","PID");
     fprintf(stdout, "|----------|----------|\n");
+    //Initialize variables
     bgjobL *bgJob = bgjobs;
     int counter = 1;
+    //Iterate through linked list and print PID in every node
     while (bgJob != NULL)
     {
       fprintf(stdout, "|%-10d|%-10d|\n", counter, bgJob->pid);
