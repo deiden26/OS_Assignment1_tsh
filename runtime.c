@@ -87,6 +87,8 @@ static void RunBuiltInCmd(commandT*);
 static bool IsBuiltIn(char*);
 /* Adds new background job to the list of background jobs */
 static void AddBgJobToList(pid_t jobId);
+/* Removes an existing background job from the list of background jobs */
+static void RemoveBgJobFromList(pid_t jobId);
 /* Print the list of background jobs (bgJobs) */
 static void PrintBgJobList();
 /************External Declaration*****************************************/
@@ -237,6 +239,7 @@ static void Exec(commandT* cmd, bool forceFork)
 //Test to see if command needs to be executed by the shell itself
 static bool IsBuiltIn(char* cmd)
 {
+  //If the command is any of these things, it's a built in command (return true)
   if (strncmp(cmd, "bg", 2) == 0)
     return TRUE;
 
@@ -245,7 +248,7 @@ static bool IsBuiltIn(char* cmd)
 
   else if (strncmp(cmd, "jobs", 4) == 0)
     return TRUE;
-
+  //Otherwise it isn't (return false)
   else
     return FALSE;
 }
@@ -269,6 +272,29 @@ static void RunBuiltInCmd(commandT* cmd)
 
 void CheckJobs()
 {
+  //Initialize variables
+  bgjobL *bgJob = bgjobs;
+  bgjobL *bgJobToDelete = NULL;
+  int status = 0;
+  //Iterate through the linked list of background jobs
+  while (bgJob != NULL)
+  {
+    //Check status of the background job and clean up the job if it is finished
+    waitpid(bgJob->pid, &status, WNOHANG);
+    //If the job is finished...
+    if (WIFEXITED(status) || WIFSIGNALED(status))
+    {
+      //Remember the job to delete by assigning its pointer to a different variable
+      bgJobToDelete = bgJob;
+      //Advance to the next node in the list
+      bgJob = bgJob->next;
+      //Remove the finished job
+      RemoveBgJobFromList(bgJobToDelete->pid);
+    }
+    else
+      //Advance to the next node in the list
+      bgJob = bgJob->next;
+  }
 }
 //Print the list of background jobs (bgJobs)
 static void PrintBgJobList()
@@ -306,6 +332,46 @@ static void AddBgJobToList(pid_t jobId)
   newJob->next = bgjobs;
   //Make the new job the head of the background jobs list
   bgjobs = newJob;
+}
+// Removes an existing background job from the list of background jobs
+static void RemoveBgJobFromList(pid_t jobId)
+{
+  //Initialize variables to iterate through the list of background jobs
+  bgjobL *job = bgjobs; //This is the leading pointer
+  bgjobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
+
+  //Iterate through the job list until you reach the end or until the job to be deleted is found
+  while (job != NULL)
+    {
+      //If the job to be deleted is found...
+      if (job->pid == jobId)
+      {
+        //If the job to be deleted is the head of the linked list...
+        if (job == bgjobs)
+          //Make the head of the linked list point to the next node
+          bgjobs = job->next;
+        
+        //If the job to be deleted is in the middle or at the end of the linked list...
+        else
+          //Remove the job to be delted from the list by making the node that points to it point to
+          //the node after it
+          prevJob->next = job->next;
+
+        //deallocate the memory the job node was using
+        free(job);
+        //Leave the while loop
+        break;
+      }
+      //If the job to be deleted wasn't found (yet)...
+      else
+      {
+        //set the traling pointer to the leading pointer
+        prevJob = job;
+        //set the leading pointer to the next node
+        job = job->next;
+      }
+    }
+    //If the node to be deleted isn't found, do nothing
 }
 
 commandT* CreateCmdT(int n)
