@@ -65,12 +65,15 @@
 #define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
 typedef struct bgjob_l {
+  char *command;
+  int jobNumber;
   pid_t pid;
   struct bgjob_l* next;
 } bgjobL;
 
 /* the pids of the background processes */
- bgjobL *bgjobs = NULL;
+ bgjobL *bgJobsHead = NULL;
+ bgjobL *bgJobsTail = NULL;
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -86,10 +89,10 @@ static void RunBuiltInCmd(commandT*);
 /* checks whether a command is a builtin command */
 static bool IsBuiltIn(char*);
 /* Adds new background job to the list of background jobs */
-static void AddBgJobToList(pid_t jobId);
+static void AddBgJobToList(pid_t jobId, char* command);
 /* Removes an existing background job from the list of background jobs */
 static void RemoveBgJobFromList(pid_t jobId);
-/* Print the list of background jobs (bgJobs) */
+/* Print the list of background jobs (bgJobsHead) */
 static void PrintBgJobList();
 /* Catch signials from child processes and reap zombie processes */
 static void sigchld_handler();
@@ -229,8 +232,8 @@ static void Exec(commandT* cmd, bool forceFork)
     {
       //Print notification of the process being run in the background
       fprintf(stdout, "Process:%s PID:%d running in background\n", cmd->argv[0],childPid);
-      //Add the job to the background job list (bgjobs)
-      AddBgJobToList(childPid);
+      //Add the job to the background job list (bgJobsHead)
+      AddBgJobToList(childPid, cmd->cmdline);
       //Do NOT tell the parent process to wait
     }
     //If the command is NOT for a background job (bg in command is set to 0)...
@@ -266,7 +269,7 @@ static void RunBuiltInCmd(commandT* cmd)
   //Return a backgrounded job to the foreground 
   else if (strncmp(cmd->argv[0], "fg", 2) == 0) 
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
-  //Print the list of background jobs (bgJobs)
+  //Print the list of background jobs (bgJobsHead)
   else if (strncmp(cmd->argv[0], "jobs", 4) == 0)
     PrintBgJobList();
   
@@ -296,48 +299,58 @@ void CheckJobs()
 {
 }
 
-//Print the list of background jobs (bgJobs)
+//Print the list of background jobs (bgJobsHead)
 static void PrintBgJobList()
 {
-  //Test for there being no background jobs
-  if (bgjobs == NULL)
-    fprintf(stdout, "There are no background jobs\n");
-  //If there are background jobs, print them in a list
-  else
+  //Initialize variables
+  bgjobL *bgJob = bgJobsHead;
+  //Iterate through linked list and print PID in every node
+  while (bgJob != NULL)
   {
-    //Print the top the the table
-    fprintf(stdout, "Background jobs in order of recency:\n");
-    fprintf(stdout, "|%-10s|%-10s|\n","Order","PID");
-    fprintf(stdout, "|----------|----------|\n");
-    //Initialize variables
-    bgjobL *bgJob = bgjobs;
-    int counter = 1;
-    //Iterate through linked list and print PID in every node
-    while (bgJob != NULL)
-    {
-      fprintf(stdout, "|%-10d|%-10d|\n", counter, bgJob->pid);
-      bgJob = bgJob->next;
-      counter++;
-    }
+    if (bgJob->jobNumber == bgJobsTail->jobNumber)
+      fprintf(stdout, "[%d]+  Running                 %s&\n", bgJob->jobNumber, bgJob->command);
+    else if (bgJob->jobNumber == bgJobsTail->jobNumber -1)
+      fprintf(stdout, "[%d]-  Running                 %s&\n", bgJob->jobNumber, bgJob->command);
+    else
+      fprintf(stdout, "[%d]   Running                 %s&\n", bgJob->jobNumber, bgJob->command);
+    bgJob = bgJob->next;
   }
 }
-//Add new background job to the front of the background jobs list (bgJobs)
-static void AddBgJobToList(pid_t jobId)
+//Add new background job to the end of the background jobs list (bgJobsHead)
+static void AddBgJobToList(pid_t jobId, char* command)
 {
   //Allocate memory for the new background job
   bgjobL *newJob = malloc(sizeof(bgjobL));
+
   //Fill in PID for new background job
   newJob->pid = jobId;
-  //Make new background job point to the head of the background jobs list
-  newJob->next = bgjobs;
-  //Make the new job the head of the background jobs list
-  bgjobs = newJob;
+  //Fill command text for new background job
+  newJob->command = malloc(strlen(command));
+  strcpy(newJob->command, command);
+  //Fill in the job number for the new background job
+  if (bgJobsTail !=  NULL)
+    newJob->jobNumber = bgJobsTail->jobNumber + 1;
+  else
+    newJob->jobNumber = 1;
+  //Fill in the "next" node for the new job (will always be null)
+  newJob->next = NULL;
+
+  //If the list has at least one node (and there fore a tail), have the tail point to the new node
+  if(bgJobsTail != NULL)
+    bgJobsTail->next = newJob;
+  //If the list is empty, make the new job the head of the background jobs list
+  else
+    bgJobsHead = newJob;
+
+  //Make the new job the tail of the background jobs list
+  bgJobsTail = newJob;
+
 }
 // Removes an existing background job from the list of background jobs
 static void RemoveBgJobFromList(pid_t jobId)
 {
   //Initialize variables to iterate through the list of background jobs
-  bgjobL *job = bgjobs; //This is the leading pointer
+  bgjobL *job = bgJobsHead; //This is the leading pointer
   bgjobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
 
   //Iterate through the job list until you reach the end or until the job to be deleted is found
@@ -346,10 +359,12 @@ static void RemoveBgJobFromList(pid_t jobId)
       //If the job to be deleted is found...
       if (job->pid == jobId)
       {
+        if (job == bgJobsTail)
+          bgJobsTail = prevJob;
         //If the job to be deleted is the head of the linked list...
-        if (job == bgjobs)
+        if (job == bgJobsHead)
           //Make the head of the linked list point to the next node
-          bgjobs = job->next;
+          bgJobsHead = job->next;
 
         //If the job to be deleted is in the middle or at the end of the linked list...
         else
@@ -358,6 +373,7 @@ static void RemoveBgJobFromList(pid_t jobId)
           prevJob->next = job->next;
 
         //deallocate the memory the job node was using
+        free(job->command);
         free(job);
         //Leave the while loop
         break;
