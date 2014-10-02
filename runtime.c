@@ -230,10 +230,10 @@ static void Exec(commandT* cmd, bool forceFork)
     //If the command is for a background job (bg in command is set to 1)...
     if (cmd->bg == 1)
     {
-      //Print notification of the process being run in the background
-      fprintf(stdout, "Process:%s PID:%d running in background\n", cmd->argv[0],childPid);
       //Add the job to the background job list (bgJobsHead)
       AddBgJobToList(childPid, cmd->cmdline);
+      //Print notification of the process being run in the background
+      fprintf(stdout, "[%d] %d\n", bgJobsTail->jobNumber,bgJobsTail->pid);
       //Do NOT tell the parent process to wait
     }
     //If the command is NOT for a background job (bg in command is set to 0)...
