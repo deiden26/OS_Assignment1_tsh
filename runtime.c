@@ -68,6 +68,7 @@ typedef struct bgjob_l {
   char *command;
   int jobNumber;
   pid_t pid;
+  char *status;
   struct bgjob_l* next;
 } bgJobL;
 
@@ -104,6 +105,14 @@ static void PrintBgJobList();
 static void sigchld_handler();
 /* Notifies user of jobs that were completed while foreground process was running */
 static void notifyCompletedJobs();
+/* Return a backgroun job to the  and notify the user */
+static void bringToForeground(pid_t jobId);
+/* Create a new bgJobL struct */
+static bgJobL* createBgJobL();
+/* Release and collect the space of a bgJobL struct */
+static void releaseBgJobL(bgJobL **jobToDelete);
+/* Change the status of an existing job */
+static void changeBgJobStatus(pid_t jobId, char* status);
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -245,7 +254,7 @@ static void Exec(commandT* cmd, bool forceFork)
     //If the command is NOT for a background job (bg in command is set to 0)...
     else
     {
-      //wait for the child to finis
+      //wait for the child to finish
       waiting = TRUE;
       waitpid(childPid,0,0);
       waiting = FALSE;
@@ -277,8 +286,19 @@ static void RunBuiltInCmd(commandT* cmd)
   if (strncmp(cmd->argv[0], "bg", 2) == 0)
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
   //Return a backgrounded job to the foreground 
-  else if (strncmp(cmd->argv[0], "fg", 2) == 0) 
-    fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
+  else if (strncmp(cmd->argv[0], "fg", 2) == 0)
+  {
+    //If there are two arguments in the command...
+    if (cmd->argc == 2)
+      //Bring the process with the given process ID to the foreground
+      bringToForeground((pid_t)cmd->argv[1]);
+    //If there is one argument in the command...
+    else if (cmd->argc == 1)
+      //Bring the most recent background process to the foreground
+      bringToForeground(0);
+    else
+      fprintf(stderr, "Too many arguments were given with fg.\n");
+  }
   //Print the list of background jobs (bgJobsHead)
   else if (strncmp(cmd->argv[0], "jobs", 4) == 0)
     PrintBgJobList();
@@ -299,6 +319,8 @@ static void sigchld_handler()
     //If the job is finished...
     if (WIFEXITED(status) || WIFSIGNALED(status))
     {
+      //Change job's status to done
+      changeBgJobStatus(childPid, "Done\0");
       //Remove the finished job
       RemoveBgJobFromList(childPid);
     }
@@ -310,6 +332,43 @@ void CheckJobs()
   notifyCompletedJobs();
 }
 
+//Return a backgroun job to the  and notify the user
+static void bringToForeground(pid_t jobId)
+{
+  //If no job number was given, default to the most recently backgrounded job
+  if (jobId == 0)
+    jobId = bgJobsTail->pid;
+  //Initialize variables
+  bgJobL *bgJob = bgJobsHead;
+  //Iterate through linked list of background jobs
+  while (bgJob != NULL)
+  {
+    //If the bgJob is the job you're looking for...
+    if (bgJob->pid == jobId)
+    {
+      //Print the command that you're bringing to the foreground
+      fprintf(stdout, "%s\n", bgJob->command);
+      //Remove the status of the job
+      if((bgJob)->status != NULL)
+      {
+        free(bgJob->status);
+        bgJob->status = NULL;
+      }
+      //Remove the job from the background list
+      RemoveBgJobFromList(jobId);
+      //Exit the loop
+      break;
+    }
+    //Move to the next job in the list
+    bgJob = bgJob->next;
+  }
+
+  //wait for the job to finish
+  waiting = TRUE;
+  waitpid(jobId,0,0);
+  waiting = FALSE;
+}
+
 //Print the list of background jobs (bgJobsHead)
 static void PrintBgJobList()
 {
@@ -318,7 +377,7 @@ static void PrintBgJobList()
   //Iterate through linked list and print PID in every node
   while (bgJob != NULL)
   {
-    fprintf(stdout, "[%d]   Running                 %s&\n", bgJob->jobNumber, bgJob->command);
+    fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
     bgJob = bgJob->next;
   }
 }
@@ -326,13 +385,16 @@ static void PrintBgJobList()
 static void AddBgJobToList(pid_t jobId, char* command)
 {
   //Allocate memory for the new background job
-  bgJobL *newJob = malloc(sizeof(bgJobL));
+  bgJobL *newJob = createBgJobL();
 
   //Fill in PID for new background job
   newJob->pid = jobId;
   //Fill command text for new background job
   newJob->command = malloc(strlen(command));
-  strcpy(newJob->command, command);
+  strncpy(newJob->command, command, strlen(command));
+  //Fill status text for new background job
+  newJob->status = malloc(strlen("Running\0"));
+  strncpy(newJob->status, "Running\0",strlen("Running\0"));
   //Fill in the job number for the new background job
   if (bgJobsTail !=  NULL)
     newJob->jobNumber = bgJobsTail->jobNumber + 1;
@@ -388,11 +450,11 @@ static void RemoveBgJobFromList(pid_t jobId)
         }
         else
         {
-          //Notify user that the job is complete
-          fprintf(stdout, "[%d]   Done                    %s\n",job->jobNumber, job->command);
+          if (job->status != NULL)
+            //Notify user that the job is complete
+            fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber,job->status, job->command);
           //deallocate the memory the job node was using
-          free(job->command);
-          free(job);
+          releaseBgJobL(&job);
         }
         //Leave the while loop
         break;
@@ -419,13 +481,13 @@ void notifyCompletedJobs()
   while (job != NULL)
   {
     //Print notification that the job was completed
-    fprintf(stdout, "[%d]   Done                    %s\n",job->jobNumber, job->command);
+    fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber, job->status, job->command);
     //Point to the job to delete
     delJob = job;
     //Move to the next job
     job = job->next;
     //delete the job that we just notified the user about
-    free(delJob);
+    releaseBgJobL(&delJob);
   }
   bgJobsFreedHead = NULL;
 }
@@ -454,4 +516,46 @@ void ReleaseCmdT(commandT **cmd){
   for(i = 0; i < (*cmd)->argc; i++)
     if((*cmd)->argv[i] != NULL) free((*cmd)->argv[i]);
   free(*cmd);
+}
+
+
+//Create a new bgJobL struct
+static bgJobL* createBgJobL()
+{
+  bgJobL *newJob = malloc(sizeof(bgJobL));
+  newJob->command = NULL;
+  newJob->status = NULL;
+  return newJob;
+}
+//Release and collect the space of a bgJobL struct
+static void releaseBgJobL(bgJobL **jobToDelete)
+{
+  if((*jobToDelete)->command != NULL) free((*jobToDelete)->command);
+  if((*jobToDelete)->status != NULL) free((*jobToDelete)->status);
+  free(*jobToDelete);
+}
+
+//Change the status of an existing job
+static void changeBgJobStatus(pid_t jobId, char* status)
+{
+  //Initialize variables
+  bgJobL *bgJob = bgJobsHead;
+  //Iterate through linked list of background jobs
+  while (bgJob != NULL)
+  {
+    //If the current background job matches the provided process ID...
+    if (bgJob->pid == jobId)
+    {
+      //Remove the current status
+      if((bgJob)->status != NULL) free((bgJob)->status);
+      //Make space for the new status
+      bgJob->status = malloc(strlen(status));
+      //Record the new status
+      strncpy(bgJob->status, status, strlen(status));
+      //Exit the loop
+      break;
+    }
+    //Get the next job from the list
+    bgJob = bgJob->next;
+  }
 }
