@@ -290,12 +290,12 @@ static void RunBuiltInCmd(commandT* cmd)
   {
     //If there are two arguments in the command...
     if (cmd->argc == 2)
-      //Bring the process with the given process ID to the foreground
+      //Bring the process with the given jobNumber
       bringToForeground((pid_t)cmd->argv[1]);
     //If there is one argument in the command...
     else if (cmd->argc == 1)
       //Bring the most recent background process to the foreground
-      bringToForeground(0);
+      bringToForeground(-1);
     else
       fprintf(stderr, "Too many arguments were given with fg.\n");
   }
@@ -333,18 +333,18 @@ void CheckJobs()
 }
 
 //Return a backgroun job to the  and notify the user
-static void bringToForeground(pid_t jobId)
+static void bringToForeground(int jobNumber)
 {
   //If no job number was given, default to the most recently backgrounded job
-  if (jobId == 0)
-    jobId = bgJobsTail->pid;
+  if (jobNumber == -1)
+    jobNumber = bgJobsTail->jobNumber;
   //Initialize variables
   bgJobL *bgJob = bgJobsHead;
   //Iterate through linked list of background jobs
   while (bgJob != NULL)
   {
     //If the bgJob is the job you're looking for...
-    if (bgJob->pid == jobId)
+    if (bgJob->jobNumber == jobNumber)
     {
       //Print the command that you're bringing to the foreground
       fprintf(stdout, "%s\n", bgJob->command);
@@ -355,18 +355,17 @@ static void bringToForeground(pid_t jobId)
         bgJob->status = NULL;
       }
       //Remove the job from the background list
-      RemoveBgJobFromList(jobId);
+      RemoveBgJobFromList(bgJob->pid);
+      //wait for the job to finish
+      waiting = TRUE;
+      waitpid(bgJob->pid,0,0);
+      waiting = FALSE;
       //Exit the loop
       break;
     }
     //Move to the next job in the list
     bgJob = bgJob->next;
   }
-
-  //wait for the job to finish
-  waiting = TRUE;
-  waitpid(jobId,0,0);
-  waiting = FALSE;
 }
 
 //Print the list of background jobs (bgJobsHead)
@@ -390,11 +389,11 @@ static void AddBgJobToList(pid_t jobId, char* command)
   //Fill in PID for new background job
   newJob->pid = jobId;
   //Fill command text for new background job
-  newJob->command = malloc(strlen(command));
-  strncpy(newJob->command, command, strlen(command));
+  newJob->command = malloc(strlen(command)+1);
+  strncpy(newJob->command, command, strlen(command)+1);
   //Fill status text for new background job
-  newJob->status = malloc(strlen("Running\0"));
-  strncpy(newJob->status, "Running\0",strlen("Running\0"));
+  newJob->status = malloc(strlen("Running\0")+1);
+  strncpy(newJob->status, "Running\0",strlen("Running\0")+1);
   //Fill in the job number for the new background job
   if (bgJobsTail !=  NULL)
     newJob->jobNumber = bgJobsTail->jobNumber + 1;
@@ -492,6 +491,10 @@ void notifyCompletedJobs()
   bgJobsFreedHead = NULL;
 }
 
+//////////////////////////////////////////////////////////////
+//  CmdT Functions
+//////////////////////////////////////////////////////////////
+
 commandT* CreateCmdT(int n)
 {
   int i;
@@ -518,6 +521,9 @@ void ReleaseCmdT(commandT **cmd){
   free(*cmd);
 }
 
+//////////////////////////////////////////////////////////////
+//  bgJobL Functions
+//////////////////////////////////////////////////////////////
 
 //Create a new bgJobL struct
 static bgJobL* createBgJobL()
@@ -549,9 +555,9 @@ static void changeBgJobStatus(pid_t jobId, char* status)
       //Remove the current status
       if((bgJob)->status != NULL) free((bgJob)->status);
       //Make space for the new status
-      bgJob->status = malloc(strlen(status));
+      bgJob->status = malloc(strlen(status)+1);
       //Record the new status
-      strncpy(bgJob->status, status, strlen(status));
+      strncpy(bgJob->status, status, strlen(status)+1);
       //Exit the loop
       break;
     }
