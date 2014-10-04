@@ -69,11 +69,17 @@ typedef struct bgjob_l {
   int jobNumber;
   pid_t pid;
   struct bgjob_l* next;
-} bgjobL;
+} bgJobL;
 
-/* the pids of the background processes */
- bgjobL *bgJobsHead = NULL;
- bgjobL *bgJobsTail = NULL;
+/* List of the background processes */
+bgJobL *bgJobsHead = NULL;
+bgJobL *bgJobsTail = NULL;
+
+// List of the background processes that have been freed but not notified
+bgJobL *bgJobsFreedHead = NULL;
+
+//Boolean value used to indicate if there is a forground process we're waiting on
+bool waiting = FALSE;
 
 /************Function Prototypes******************************************/
 /* run command */
@@ -96,6 +102,8 @@ static void RemoveBgJobFromList(pid_t jobId);
 static void PrintBgJobList();
 /* Catch signials from child processes and reap zombie processes */
 static void sigchld_handler();
+/* Notifies user of jobs that were completed while foreground process was running */
+static void notifyCompletedJobs();
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -232,14 +240,16 @@ static void Exec(commandT* cmd, bool forceFork)
     {
       //Add the job to the background job list (bgJobsHead)
       AddBgJobToList(childPid, cmd->cmdline);
-      //Print notification of the process being run in the background
-      fprintf(stdout, "[%d] %d\n", bgJobsTail->jobNumber,bgJobsTail->pid);
       //Do NOT tell the parent process to wait
     }
     //If the command is NOT for a background job (bg in command is set to 0)...
     else
-      //wait for the child to finish
+    {
+      //wait for the child to finis
+      waiting = TRUE;
       waitpid(childPid,0,0);
+      waiting = FALSE;
+    }
   }
 }
 
@@ -297,22 +307,18 @@ static void sigchld_handler()
 
 void CheckJobs()
 {
+  notifyCompletedJobs();
 }
 
 //Print the list of background jobs (bgJobsHead)
 static void PrintBgJobList()
 {
   //Initialize variables
-  bgjobL *bgJob = bgJobsHead;
+  bgJobL *bgJob = bgJobsHead;
   //Iterate through linked list and print PID in every node
   while (bgJob != NULL)
   {
-    if (bgJob->jobNumber == bgJobsTail->jobNumber)
-      fprintf(stdout, "[%d]+  Running                 %s&\n", bgJob->jobNumber, bgJob->command);
-    else if (bgJob->jobNumber == bgJobsTail->jobNumber -1)
-      fprintf(stdout, "[%d]-  Running                 %s&\n", bgJob->jobNumber, bgJob->command);
-    else
-      fprintf(stdout, "[%d]   Running                 %s&\n", bgJob->jobNumber, bgJob->command);
+    fprintf(stdout, "[%d]   Running                 %s&\n", bgJob->jobNumber, bgJob->command);
     bgJob = bgJob->next;
   }
 }
@@ -320,7 +326,7 @@ static void PrintBgJobList()
 static void AddBgJobToList(pid_t jobId, char* command)
 {
   //Allocate memory for the new background job
-  bgjobL *newJob = malloc(sizeof(bgjobL));
+  bgJobL *newJob = malloc(sizeof(bgJobL));
 
   //Fill in PID for new background job
   newJob->pid = jobId;
@@ -350,8 +356,8 @@ static void AddBgJobToList(pid_t jobId, char* command)
 static void RemoveBgJobFromList(pid_t jobId)
 {
   //Initialize variables to iterate through the list of background jobs
-  bgjobL *job = bgJobsHead; //This is the leading pointer
-  bgjobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
+  bgJobL *job = bgJobsHead; //This is the leading pointer
+  bgJobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
 
   //Iterate through the job list until you reach the end or until the job to be deleted is found
   while (job != NULL)
@@ -359,7 +365,9 @@ static void RemoveBgJobFromList(pid_t jobId)
       //If the job to be deleted is found...
       if (job->pid == jobId)
       {
+        //If the job to be deleted is the tail of the linked list...
         if (job == bgJobsTail)
+          //Set the tail to the job before the one to be deleted
           bgJobsTail = prevJob;
         //If the job to be deleted is the head of the linked list...
         if (job == bgJobsHead)
@@ -371,10 +379,21 @@ static void RemoveBgJobFromList(pid_t jobId)
           //Remove the job to be delted from the list by making the node that points to it point to
           //the node after it
           prevJob->next = job->next;
-
-        //deallocate the memory the job node was using
-        free(job->command);
-        free(job);
+        //If we're waiting on a foreground process...
+        if(waiting)
+        {
+          //Add the job to the front of list of freed jobs
+          job->next = bgJobsFreedHead;
+          bgJobsFreedHead = job;
+        }
+        else
+        {
+          //Notify user that the job is complete
+          fprintf(stdout, "[%d]   Done                    %s\n",job->jobNumber, job->command);
+          //deallocate the memory the job node was using
+          free(job->command);
+          free(job);
+        }
         //Leave the while loop
         break;
       }
@@ -388,6 +407,27 @@ static void RemoveBgJobFromList(pid_t jobId)
       }
     }
     //If the node to be deleted isn't found, do nothing
+}
+
+//Notifies user of jobs that were completed while foreground process was running
+void notifyCompletedJobs()
+{
+  //Initialize variables
+  bgJobL *job = bgJobsFreedHead; //Job to iterate over
+  bgJobL *delJob = NULL; //Job pointer for deletion
+  //While we aren't at the end of the list (and the list still has nodes)
+  while (job != NULL)
+  {
+    //Print notification that the job was completed
+    fprintf(stdout, "[%d]   Done                    %s\n",job->jobNumber, job->command);
+    //Point to the job to delete
+    delJob = job;
+    //Move to the next job
+    job = job->next;
+    //delete the job that we just notified the user about
+    free(delJob);
+  }
+  bgJobsFreedHead = NULL;
 }
 
 commandT* CreateCmdT(int n)
