@@ -79,6 +79,9 @@ bgJobL *bgJobsTail = NULL;
 // List of the background processes that have been freed but not notified
 bgJobL *bgJobsFreedHead = NULL;
 
+// The job in the foreground
+bgJobL *fgJob = NULL;
+
 //Boolean value used to indicate if there is a forground process we're waiting on
 bool waiting = FALSE;
 
@@ -228,6 +231,12 @@ static void Exec(commandT* cmd, bool forceFork)
   //Create a copy of the current state
   pid_t childPid = fork();
 
+  //Block sigchld
+  sigset_t x;
+  sigemptyset (&x);
+  sigaddset(&x, SIGCHLD);
+  sigprocmask(SIG_BLOCK, &x, NULL);
+
   //If there was an error when creating the child process
   if (childPid == -1)
   {
@@ -237,7 +246,13 @@ static void Exec(commandT* cmd, bool forceFork)
   //If the process that is running is the child, execute the comand
   else if (childPid == 0)
   {
+    //Set the process group ID
+    setpgid(0,0);
+    //Unblock sigchld
+    sigprocmask(SIG_UNBLOCK, &x, NULL);
+    //Execute the program
     execv(cmd->name,cmd->argv);
+    //Notify user if there is an error
     fprintf(stderr, "%s\n", "command not found");
     exit(0);
   }
@@ -249,15 +264,26 @@ static void Exec(commandT* cmd, bool forceFork)
     {
       //Add the job to the background job list (bgJobsHead)
       AddBgJobToList(childPid, cmd->cmdline);
+      //Unblock sigchld
+      sigprocmask(SIG_UNBLOCK, &x, NULL);
       //Do NOT tell the parent process to wait
     }
     //If the command is NOT for a background job (bg in command is set to 0)...
     else
     {
+      //Unblock sigchld
+      sigprocmask(SIG_UNBLOCK, &x, NULL);
+      //Record the job information in a bgJobL object in case it is interupted
+      fgJob = createBgJobL();
+      fgJob->command = malloc(strlen(cmd->cmdline)+1);
+      strncpy(fgJob->command, cmd->cmdline, strlen(cmd->cmdline)+1);
+      fgJob->pid = childPid;
       //wait for the child to finish
       waiting = TRUE;
       waitpid(childPid,0,0);
       waiting = FALSE;
+      //Free the bgJobL object
+      if(fgJob != NULL) releaseBgJobL(&fgJob);
     }
   }
 }
@@ -327,9 +353,47 @@ static void sigchld_handler()
   }
 }
 
+void stopFgProc()
+{
+  if (fgJob != NULL)
+  {
+    int output;
+    AddBgJobToList(fgJob->pid, fgJob->command);
+    changeBgJobStatus(fgJob->pid, "Stopped\0");
+    output = kill(fgJob->pid, SIGSTOP);
+    releaseBgJobL(&fgJob);
+    fprintf(stderr, "%d\n", output);
+  } 
+}
+void killFgProc()
+{
+  if (fgJob != NULL)
+  {
+    int output;
+    output = kill(-(fgJob->pid), SIGINT);
+    fprintf(stderr, "%d\n", output);
+  } 
+}
+
 void CheckJobs()
 {
   notifyCompletedJobs();
+}
+
+void cleanExit()
+{
+  //Initialize variables
+  bgJobL *bgJob = bgJobsHead;
+  bgJobL *jobToDel = NULL;
+  //Iterate through linked list, kill every background job, and free every node
+  while (bgJob != NULL)
+  {
+    kill(-(bgJob->pid), SIGINT);
+    jobToDel = bgJob;
+    bgJob = bgJob->next;
+    releaseBgJobL(&jobToDel);
+  }
+  bgJobsHead = NULL;
 }
 
 //Return a backgroun job to the  and notify the user
@@ -354,11 +418,19 @@ static void bringToForeground(int jobNumber)
         free(bgJob->status);
         bgJob->status = NULL;
       }
+      //Tell job to continue working if it has been stopped
+      kill(bgJob->pid,SIGCONT);
+      //Record the job information in a bgJobL object in case it is interupted
+      fgJob = createBgJobL();
+      fgJob->command = malloc(strlen(bgJob->command)+1);
+      strncpy(fgJob->command, bgJob->command, strlen(bgJob->command)+1);
+      fgJob->pid = bgJob->pid;
       //Remove the job from the background list
       RemoveBgJobFromList(bgJob->pid);
       //wait for the job to finish
       waiting = TRUE;
       waitpid(bgJob->pid,0,0);
+      if (fgJob != NULL) releaseBgJobL(&fgJob);
       waiting = FALSE;
       //Exit the loop
       break;

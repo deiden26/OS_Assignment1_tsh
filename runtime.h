@@ -127,7 +127,25 @@ EXTERN void RunCmdRedirIn(commandT*, char*);
  *    Input: void
  *    Output: void
  ***********************************************************************/
-EXTERN void StopFgProc();
+EXTERN void stopFgProc();
+
+/***********************************************************************
+ *  Title: Kill the foreground process
+ * ---------------------------------------------------------------------
+ *    Purpose: Kills the current foreground process if there is any.
+ *    Input: void
+ *    Output: void
+ ***********************************************************************/
+EXTERN void killFgProc();
+
+/***********************************************************************
+ *  Title: Clean up memory usage and processes before exiting
+ * ---------------------------------------------------------------------
+ *    Purpose: Kills all background processes if any
+ *    Input: void
+ *    Output: void
+ ***********************************************************************/
+EXTERN void cleanExit();
 
 /***********************************************************************
  *  Title: Create a command structure 

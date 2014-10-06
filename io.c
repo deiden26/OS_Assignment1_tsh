@@ -105,7 +105,7 @@ void getCommandLine(char** buf, int size)
     {
       size *= 2;
       cmd = realloc(cmd, sizeof(char)*(size+1));
-    }		
+    }
     cmd[used] = ch;
     used++;
     cmd[used] = '\0';

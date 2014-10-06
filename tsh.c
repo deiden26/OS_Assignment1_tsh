@@ -40,6 +40,7 @@
 #include "io.h"
 #include "interpreter.h"
 #include "runtime.h"
+ #include <stdio.h>
 
 /************Defines and Typedefs*****************************************/
 /*  #defines and typedefs should have their names in all caps.
@@ -77,6 +78,7 @@ int main (int argc, char *argv[])
 
     if(strcmp(cmdLine, "exit") == 0)
     {
+      cleanExit();
       forceExit=TRUE;
       continue;
     }
@@ -97,5 +99,9 @@ int main (int argc, char *argv[])
 
 static void sig(int signo)
 {
+  //If the user pressed ctrl-c (sigint)
+  if (signo == 2) killFgProc();
+  //If the user pressed ctrl-z (sigstp)
+  if (signo == 18) stopFgProc();
 }
 
