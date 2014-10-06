@@ -360,9 +360,9 @@ void stopFgProc()
     int output;
     AddBgJobToList(fgJob->pid, fgJob->command);
     changeBgJobStatus(fgJob->pid, "Stopped\0");
-    output = kill(fgJob->pid, SIGSTOP);
-    releaseBgJobL(&fgJob);
+    output = kill(-(fgJob->pid), SIGTSTP);
     fprintf(stderr, "%d\n", output);
+    releaseBgJobL(&fgJob);
   } 
 }
 void killFgProc()
