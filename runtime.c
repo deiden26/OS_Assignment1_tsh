@@ -611,6 +611,7 @@ static void releaseBgJobL(bgJobL **jobToDelete)
   if((*jobToDelete)->command != NULL) free((*jobToDelete)->command);
   if((*jobToDelete)->status != NULL) free((*jobToDelete)->status);
   free(*jobToDelete);
+  *jobToDelete = NULL;
 }
 
 //Change the status of an existing job
