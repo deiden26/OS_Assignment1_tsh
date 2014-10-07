@@ -116,6 +116,8 @@ static bgJobL* createBgJobL();
 static void releaseBgJobL(bgJobL **jobToDelete);
 /* Change the status of an existing job */
 static void changeBgJobStatus(pid_t jobId, char* status);
+/* Wait for foreground process to finish */
+static void waitFg();
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -280,10 +282,11 @@ static void Exec(commandT* cmd, bool forceFork)
       fgJob->pid = childPid;
       //wait for the child to finish
       waiting = TRUE;
-      waitpid(childPid,0,0);
-      waiting = FALSE;
+      waitFg();
+      //waitpid(childPid,0,0);
+      //waiting = FALSE;
       //Free the bgJobL object
-      if(fgJob != NULL) releaseBgJobL(&fgJob);
+      //if(fgJob != NULL) releaseBgJobL(&fgJob);
     }
   }
 }
@@ -333,22 +336,41 @@ static void RunBuiltInCmd(commandT* cmd)
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
 }
 
+static void waitFg()
+{
+  while(waiting)
+  {
+    usleep(1);
+  }
+}
+
 // Catch signials from child processes and reap zombie processes
 static void sigchld_handler()
 {
   //Initialize variables
   pid_t childPid;
   int status = 0;
-  //Check the status of all background jobs and clean up jobs that are finished (waitpid does the cleaning)
-   while ((childPid = waitpid(-1, &status, WNOHANG)) > 0)
+  //Check the status of all jobs and clean up jobs that are finished (waitpid does the cleaning)
+   while ((childPid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
   {
-    //If the job is finished...
-    if (WIFEXITED(status) || WIFSIGNALED(status))
+    //If the job is finished or has stopped...
+    if (WIFEXITED(status) || WIFSIGNALED(status) || WIFSTOPPED(status) )
     {
-      //Change job's status to done
-      changeBgJobStatus(childPid, "Done\0");
-      //Remove the finished job
-      RemoveBgJobFromList(childPid);
+      //If the job is a foreground job
+      if(fgJob != NULL && fgJob->pid == childPid)
+      {
+        waiting = FALSE;
+        //Free the bgJobL object
+        if(fgJob != NULL) releaseBgJobL(&fgJob);
+      }
+      //If the job is a background job
+      else
+      {
+        //Change job's status to done
+        changeBgJobStatus(childPid, "Done\0");
+        //Remove the finished job
+        RemoveBgJobFromList(childPid);
+      }
     }
   }
 }
@@ -357,21 +379,17 @@ void stopFgProc()
 {
   if (fgJob != NULL)
   {
-    int output;
     AddBgJobToList(fgJob->pid, fgJob->command);
     changeBgJobStatus(fgJob->pid, "Stopped\0");
-    output = kill(-(fgJob->pid), SIGTSTP);
-    fprintf(stderr, "%d\n", output);
-    releaseBgJobL(&fgJob);
+    kill(-(fgJob->pid), SIGTSTP);
+    //releaseBgJobL(&fgJob);
   } 
 }
 void killFgProc()
 {
   if (fgJob != NULL)
   {
-    int output;
-    output = kill(-(fgJob->pid), SIGINT);
-    fprintf(stderr, "%d\n", output);
+    kill(-(fgJob->pid), SIGINT);
   } 
 }
 
