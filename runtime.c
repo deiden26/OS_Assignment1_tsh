@@ -243,6 +243,7 @@ static void Exec(commandT* cmd, bool forceFork)
   if (childPid == -1)
   {
     fprintf(stderr, "%s\n", "There was a fork error when executing your command");
+    fflush(stdout);
     exit(1);
   }
   //If the process that is running is the child, execute the comand
@@ -256,6 +257,7 @@ static void Exec(commandT* cmd, bool forceFork)
     execv(cmd->name,cmd->argv);
     //Notify user if there is an error
     fprintf(stderr, "%s\n", "command not found");
+    fflush(stdout);
     exit(0);
   }
   //If the process that is running is the parent...
@@ -313,7 +315,10 @@ static void RunBuiltInCmd(commandT* cmd)
 {
   //Send SIGCONT to a backgrounded job, but do not give it the foreground 
   if (strncmp(cmd->argv[0], "bg", 2) == 0)
+  {
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
+    fflush(stdout);
+  }
   //Return a backgrounded job to the foreground 
   else if (strncmp(cmd->argv[0], "fg", 2) == 0)
   {
@@ -326,14 +331,20 @@ static void RunBuiltInCmd(commandT* cmd)
       //Bring the most recent background process to the foreground
       bringToForeground(-1);
     else
+    {
       fprintf(stderr, "Too many arguments were given with fg.\n");
+      fflush(stdout);
+    }
   }
   //Print the list of background jobs (bgJobsHead)
   else if (strncmp(cmd->argv[0], "jobs", 4) == 0)
     PrintBgJobList();
   
   else
+  {
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
+    fflush(stdout);
+  }
 }
 
 static void waitFg()
@@ -430,6 +441,7 @@ static void bringToForeground(int jobNumber)
     {
       //Print the command that you're bringing to the foreground
       fprintf(stdout, "%s\n", bgJob->command);
+      fflush(stdout);
       //Remove the status of the job
       if((bgJob)->status != NULL)
       {
@@ -467,6 +479,7 @@ static void PrintBgJobList()
   while (bgJob != NULL)
   {
     fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+    fflush(stdout);
     bgJob = bgJob->next;
   }
 }
@@ -540,8 +553,11 @@ static void RemoveBgJobFromList(pid_t jobId)
         else
         {
           if (job->status != NULL)
+          {
             //Notify user that the job is complete
             fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber,job->status, job->command);
+            fflush(stdout);
+          }
           //deallocate the memory the job node was using
           releaseBgJobL(&job);
         }
@@ -571,6 +587,7 @@ void notifyCompletedJobs()
   {
     //Print notification that the job was completed
     fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber, job->status, job->command);
+    fflush(stdout);
     //Point to the job to delete
     delJob = job;
     //Move to the next job
