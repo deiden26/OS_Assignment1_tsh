@@ -108,6 +108,8 @@ static void PrintBgJobList();
 static void sigchld_handler();
 /* Return a backgroun job to the  and notify the user */
 static void bringToForeground(pid_t jobId);
+/* Send sigcont signal to background job */
+static void continueBgJob(int jobNumber);
 /* Create a new bgJobL struct */
 static bgJobL* createBgJobL();
 /* Release and collect the space of a bgJobL struct */
@@ -314,8 +316,18 @@ static void RunBuiltInCmd(commandT* cmd)
   //Send SIGCONT to a backgrounded job, but do not give it the foreground 
   if (strncmp(cmd->argv[0], "bg", 2) == 0)
   {
-    fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);
-    fflush(stdout);
+    //If there are two arguments in the command...
+    if (cmd->argc == 2)
+      //Bring the process with the given jobNumber
+      continueBgJob((pid_t)cmd->argv[1]);
+    //If there is one argument in the command...
+    else if (cmd->argc == 1)
+      //Bring the most recent background process to the foreground
+      continueBgJob(-1);
+    else
+    {
+      fprintf(stderr, "Too many arguments were given with bg.\n");
+    }
   }
   //Return a backgrounded job to the foreground 
   else if (strncmp(cmd->argv[0], "fg", 2) == 0)
@@ -331,7 +343,6 @@ static void RunBuiltInCmd(commandT* cmd)
     else
     {
       fprintf(stderr, "Too many arguments were given with fg.\n");
-      fflush(stdout);
     }
   }
   //Print the list of background jobs (bgJobsHead)
@@ -451,47 +462,79 @@ void cleanExit()
   bgJobsHead = NULL;
 }
 
+//Send sigcont signal to background job
+static void continueBgJob(int jobNumber)
+{
+  //If the background job list isn't empty...
+  if(bgJobsHead)
+  {
+    //If no job number was given, default to the most recently backgrounded job
+    if (jobNumber == -1)
+      jobNumber = bgJobsTail->jobNumber;
+    //Initialize variables
+    bgJobL *bgJob = bgJobsHead;
+    //Iterate through linked list of background jobs
+    while (bgJob != NULL)
+    {
+      //If the bgJob is the job you're looking for...
+      if (bgJob->jobNumber == jobNumber)
+      {
+        //Tell job to continue working if it has been stopped
+        kill(bgJob->pid,SIGCONT);
+        //Change it's status in the job list to "stopped"
+        changeBgJobStatus(bgJob->pid, "Running\0");
+        break;
+      }
+      bgJob = bgJob->next;
+    }
+  }
+}
+
 //Return a backgroun job to the foreground and notify the user
 static void bringToForeground(int jobNumber)
 {
-  //If no job number was given, default to the most recently backgrounded job
-  if (jobNumber == -1)
-    jobNumber = bgJobsTail->jobNumber;
-  //Initialize variables
-  bgJobL *bgJob = bgJobsHead;
-  //Iterate through linked list of background jobs
-  while (bgJob != NULL)
+  //If the background job list isn't empty...
+  if(bgJobsHead)
   {
-    //If the bgJob is the job you're looking for...
-    if (bgJob->jobNumber == jobNumber)
+    //If no job number was given, default to the most recently backgrounded job
+    if (jobNumber == -1)
+      jobNumber = bgJobsTail->jobNumber;
+    //Initialize variables
+    bgJobL *bgJob = bgJobsHead;
+    //Iterate through linked list of background jobs
+    while (bgJob != NULL)
     {
-      //Print the command that you're bringing to the foreground
-      fprintf(stdout, "%s\n", bgJob->command);
-      fflush(stdout);
-      //Tell job to continue working if it has been stopped
-      kill(bgJob->pid,SIGCONT);
-      //Record the job information in a bgJobL object in case it is interupted
-      fgJob = createBgJobL();
-      fgJob->command = malloc(strlen(bgJob->command)+1);
-      strncpy(fgJob->command, bgJob->command, strlen(bgJob->command)+1);
-      fgJob->pid = bgJob->pid;
-      //Remove the status of the job so nothing prints when removing the job from the background job list
-      if((bgJob)->status != NULL)
+      //If the bgJob is the job you're looking for...
+      if (bgJob->jobNumber == jobNumber)
       {
-        free(bgJob->status);
-        bgJob->status = NULL;
+        //Print the command that you're bringing to the foreground
+        fprintf(stdout, "%s\n", bgJob->command);
+        fflush(stdout);
+        //Tell job to continue working if it has been stopped
+        kill(bgJob->pid,SIGCONT);
+        //Record the job information in a bgJobL object in case it is interupted
+        fgJob = createBgJobL();
+        fgJob->command = malloc(strlen(bgJob->command)+1);
+        strncpy(fgJob->command, bgJob->command, strlen(bgJob->command)+1);
+        fgJob->pid = bgJob->pid;
+        //Remove the status of the job so nothing prints when removing the job from the background job list
+        if((bgJob)->status != NULL)
+        {
+          free(bgJob->status);
+          bgJob->status = NULL;
+        }
+        //Remove the job from the background job list
+        RemoveBgJobFromList(bgJob->pid);
+        //wait for the job to finish
+        waiting = TRUE;
+        waitFg();
+        //waiting variable set to false and fgJob is freed in sigchld_handler()
+        //Exit the loop
+        break;
       }
-      //Remove the job from the background job list
-      RemoveBgJobFromList(bgJob->pid);
-      //wait for the job to finish
-      waiting = TRUE;
-      waitFg();
-      //waiting variable set to false and fgJob is freed in sigchld_handler()
-      //Exit the loop
-      break;
+      //If bgJob isn't the job you're looking for, move to the next job in the list
+      bgJob = bgJob->next;
     }
-    //Move to the next job in the list
-    bgJob = bgJob->next;
   }
 }
 
@@ -500,15 +543,18 @@ static void PrintBgJobList()
 {
   //Initialize variables
   bgJobL *bgJob = bgJobsHead;
-  //Iterate through linked list and print PID in every node
+  //Iterate through linked list and print the job number, status, and command in every node
   while (bgJob != NULL)
   {
-    fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+    if (strncmp(bgJob->status, "Stopped\0", 8) == 0)
+      fprintf(stdout, "[%d]   %s                 %s\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+    else if (strncmp(bgJob->status, "Running\0", 8) == 0)
+      fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
     fflush(stdout);
     bgJob = bgJob->next;
   }
 }
-//Add new background job to the end of the background jobs list (bgJobsHead)
+//Add new background job to the end of the background jobs list (bgJobsTail)
 static void AddBgJobToList(pid_t jobId, char* command)
 {
   //Allocate memory for the new background job
@@ -524,8 +570,10 @@ static void AddBgJobToList(pid_t jobId, char* command)
   strncpy(newJob->status, "Running\0",strlen("Running\0")+1);
   //Fill in the job number for the new background job
   if (bgJobsTail !=  NULL)
+    //Job number = one more than the last job number
     newJob->jobNumber = bgJobsTail->jobNumber + 1;
   else
+    //If no previous jobs in the list, job number is 1
     newJob->jobNumber = 1;
   //Fill in the "next" node for the new job (will always be null)
   newJob->next = NULL;
