@@ -101,7 +101,7 @@ static bool IsBuiltIn(char*);
 /* Adds new background job to the list of background jobs */
 static void AddBgJobToList(pid_t jobId, char* command);
 /* Removes an existing background job from the list of background jobs */
-static void RemoveBgJobFromList(pid_t jobId);
+//static void RemoveBgJobFromList(pid_t jobId);
 /* Print the list of background jobs (bgJobsHead) */
 static void PrintBgJobList();
 /* Catch signials from child processes and reap zombie processes */
@@ -393,7 +393,7 @@ static void sigchld_handler()
         //Change job's status to done
         changeBgJobStatus(childPid, "Done\0");
         //Remove the finished job from the job list
-        RemoveBgJobFromList(childPid);
+        //RemoveBgJobFromList(childPid);
       }
     }
   }
@@ -422,7 +422,7 @@ void killFgProc()
     kill(-(fgJob->pid), SIGINT);
   } 
 }
-
+/*
 //Notifies user of jobs that were completed while foreground process was running
 void CheckJobs()
 {
@@ -444,6 +444,54 @@ void CheckJobs()
   }
   bgJobsFreedHead = NULL;
 }
+*/
+
+//Notifies user of jobs that were completed and cleans background job list
+void CheckJobs()
+{
+  //Initialize variables
+  bgJobL *job = bgJobsHead; //This is the leading pointer
+  bgJobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
+  bgJobL *jobToDel = NULL; //Job pointer for deletion
+  //While we aren't at the end of the list (and the list still has nodes)
+  while (job != NULL)
+  {
+    if (strncmp(job->status, "Done\0", 5) == 0)
+    {
+      //Print notification that the job was completed
+      fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber, job->status, job->command);
+      fflush(stdout);
+      
+      //If the job to be deleted is the tail of the linked list...
+        if (job == bgJobsTail)
+          //Set the tail to the job before the one to be deleted
+          bgJobsTail = prevJob;
+        //If the job to be deleted is the head of the linked list...
+        if (job == bgJobsHead)
+          //Make the head of the linked list point to the next node
+          bgJobsHead = job->next;
+
+        //If the job to be deleted is in the middle or at the end of the linked list...
+        else
+          //Remove the job to be delted from the list by making the node that points to it point to
+          //the node after it
+          prevJob->next = job->next;
+
+        //Move to the next node
+        jobToDel = job;
+        job = job->next;
+        //deallocate the memory the job node was using
+        releaseBgJobL(&jobToDel);
+    }
+    else
+    {
+      //set the traling pointer to the leading pointer
+      prevJob = job;
+      //set the leading pointer to the next node
+      job = job->next;
+    }
+  }
+}
 
 //Kills all background processes if any before exiting
 void cleanExit()
@@ -460,6 +508,7 @@ void cleanExit()
     releaseBgJobL(&jobToDel);
   }
   bgJobsHead = NULL;
+  bgJobsTail = NULL;
 }
 
 //Send sigcont signal to background job
@@ -524,7 +573,7 @@ static void bringToForeground(int jobNumber)
           bgJob->status = NULL;
         }
         //Remove the job from the background job list
-        RemoveBgJobFromList(bgJob->pid);
+        //RemoveBgJobFromList(bgJob->pid);
         //wait for the job to finish
         waiting = TRUE;
         waitFg();
@@ -589,6 +638,7 @@ static void AddBgJobToList(pid_t jobId, char* command)
   bgJobsTail = newJob;
 
 }
+/*
 // Removes an existing background job from the list of background jobs
 static void RemoveBgJobFromList(pid_t jobId)
 {
@@ -648,6 +698,7 @@ static void RemoveBgJobFromList(pid_t jobId)
     }
     //If the node to be deleted isn't found, do nothing
 }
+*/
 
 //////////////////////////////////////////////////////////////
 //  CmdT Functions
