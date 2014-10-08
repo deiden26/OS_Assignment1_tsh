@@ -141,7 +141,7 @@ EXTERN void killFgProc();
 /***********************************************************************
  *  Title: Clean up memory usage and processes before exiting
  * ---------------------------------------------------------------------
- *    Purpose: Kills all background processes if any
+ *    Purpose: Kills all background processes if any before exiting
  *    Input: void
  *    Output: void
  ***********************************************************************/
@@ -186,7 +186,7 @@ EXTERN char* getLogin();
 /***********************************************************************
  *  Title: Check the jobs 
  * ---------------------------------------------------------------------
- *    Purpose: Checks the status of the background jobs.
+ *    Purpose: Notifies user of jobs that were completed while foreground process was running
  *    Input: void
  *    Output: void 
  ***********************************************************************/

@@ -101,7 +101,7 @@ static void sig(int signo)
 {
   //If the user pressed ctrl-c (sigint)
   if (signo == 2) killFgProc();
-  //If the user pressed ctrl-z (sigstp)
+  //If the user pressed ctrl-z (sigtstp)
   if (signo == 18) stopFgProc();
 }
 
