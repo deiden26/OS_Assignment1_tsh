@@ -101,13 +101,15 @@ static bool IsBuiltIn(char*);
 /* Adds new background job to the list of background jobs */
 static void AddBgJobToList(pid_t jobId, char* command);
 /* Removes an existing background job from the list of background jobs */
-//static void RemoveBgJobFromList(pid_t jobId);
+static void RemoveBgJobFromList(pid_t jobId);
 /* Print the list of background jobs (bgJobsHead) */
 static void PrintBgJobList();
+/* Print a particular background job */
+static void printBgJob(pid_t jobPid);
 /* Catch signials from child processes and reap zombie processes */
 static void sigchld_handler();
 /* Return a backgroun job to the  and notify the user */
-static void bringToForeground(pid_t jobId);
+static void bringToForeground(int jobId);
 /* Send sigcont signal to background job */
 static void continueBgJob(int jobNumber);
 /* Create a new bgJobL struct */
@@ -319,7 +321,7 @@ static void RunBuiltInCmd(commandT* cmd)
     //If there are two arguments in the command...
     if (cmd->argc == 2)
       //Bring the process with the given jobNumber
-      continueBgJob((pid_t)cmd->argv[1]);
+      continueBgJob(strtol(cmd->argv[1],NULL,10));
     //If there is one argument in the command...
     else if (cmd->argc == 1)
       //Bring the most recent background process to the foreground
@@ -335,7 +337,7 @@ static void RunBuiltInCmd(commandT* cmd)
     //If there are two arguments in the command...
     if (cmd->argc == 2)
       //Bring the process with the given jobNumber
-      bringToForeground((pid_t)cmd->argv[1]);
+      bringToForeground(strtol(cmd->argv[1],NULL,10));
     //If there is one argument in the command...
     else if (cmd->argc == 1)
       //Bring the most recent background process to the foreground
@@ -408,6 +410,8 @@ void stopFgProc()
     AddBgJobToList(fgJob->pid, fgJob->command);
     //Change it's status in the job list to "stopped"
     changeBgJobStatus(fgJob->pid, "Stopped\0");
+    //Notify user that the job has been stopped
+    printBgJob(fgJob->pid);
     //Stop it and all of its children
     kill(-(fgJob->pid), SIGTSTP);
   } 
@@ -556,9 +560,6 @@ static void bringToForeground(int jobNumber)
       //If the bgJob is the job you're looking for...
       if (bgJob->jobNumber == jobNumber)
       {
-        //Print the command that you're bringing to the foreground
-        fprintf(stdout, "%s\n", bgJob->command);
-        fflush(stdout);
         //Tell job to continue working if it has been stopped
         kill(bgJob->pid,SIGCONT);
         //Record the job information in a bgJobL object in case it is interupted
@@ -573,7 +574,7 @@ static void bringToForeground(int jobNumber)
           bgJob->status = NULL;
         }
         //Remove the job from the background job list
-        //RemoveBgJobFromList(bgJob->pid);
+        RemoveBgJobFromList(bgJob->pid);
         //wait for the job to finish
         waiting = TRUE;
         waitFg();
@@ -584,6 +585,35 @@ static void bringToForeground(int jobNumber)
       //If bgJob isn't the job you're looking for, move to the next job in the list
       bgJob = bgJob->next;
     }
+  }
+}
+
+//Print a particular background job
+static void printBgJob(pid_t jobPid)
+{
+  //Initialize variables
+  bgJobL *bgJob = bgJobsHead;
+  //Iterate through linked list and print the job number, status, and command in a particular node
+  while (bgJob != NULL)
+  {
+    //If the job matches the job we're looking for...
+    if (bgJob->pid == jobPid)
+    {
+      //If the process is stopeed...
+      if (strncmp(bgJob->status, "Stopped\0", 8) == 0)
+        //Print inforamatino without an "&" symbol
+        fprintf(stdout, "[%d]   %s                 %s\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+      //If the process is running...
+      else if (strncmp(bgJob->status, "Running\0", 8) == 0)
+        //Print inforamatino with an "&" symbol
+        fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+      //Print the thing immediately
+      fflush(stdout);
+      //Exit the loop
+      break;
+    }
+    //If not, check the next node
+    bgJob = bgJob->next;
   }
 }
 
@@ -638,7 +668,7 @@ static void AddBgJobToList(pid_t jobId, char* command)
   bgJobsTail = newJob;
 
 }
-/*
+
 // Removes an existing background job from the list of background jobs
 static void RemoveBgJobFromList(pid_t jobId)
 {
@@ -698,7 +728,7 @@ static void RemoveBgJobFromList(pid_t jobId)
     }
     //If the node to be deleted isn't found, do nothing
 }
-*/
+
 
 //////////////////////////////////////////////////////////////
 //  CmdT Functions
