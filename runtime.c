@@ -289,8 +289,7 @@ static void Exec(commandT* cmd, bool forceFork)
     {
       //Record the job information in a bgJobL object in case it is interupted
       fgJob = createBgJobL();
-      fgJob->command = malloc(strlen(cmd->cmdline)+1);
-      strncpy(fgJob->command, cmd->cmdline, strlen(cmd->cmdline)+1);
+      fgJob->command = strdup(cmd->cmdline);
       fgJob->pid = childPid;
       //Unblock sigchld so child process can be reaped when completed
       sigprocmask(SIG_UNBLOCK, &x, NULL);
@@ -523,7 +522,7 @@ static void continueBgJob(int jobNumber)
       if (bgJob->jobNumber == jobNumber)
       {
         //Tell job to continue working if it has been stopped
-        kill(bgJob->pid,SIGCONT);
+        kill(-(bgJob->pid),SIGCONT);
         //Change it's status in the job list to "stopped"
         changeBgJobStatus(bgJob->pid, "Running\0");
         break;
@@ -559,11 +558,10 @@ static void bringToForeground(int jobNumber)
         //If the job is currently stopeed...
         if(strncmp(bgJob->status, "Stopped\0", 8) == 0)
           //Tell job to continue working
-          kill(bgJob->pid,SIGCONT);
+          kill(-(bgJob->pid),SIGCONT);
         //Record the job information in a bgJobL object in case it is interupted
         fgJob = createBgJobL();
-        fgJob->command = malloc(strlen(bgJob->command)+1);
-        strncpy(fgJob->command, bgJob->command, strlen(bgJob->command)+1);
+        fgJob->command = strdup(bgJob->command);
         fgJob->pid = bgJob->pid;
         //Remove the status of the job so nothing prints when removing the job from the background job list
         if((bgJob)->status != NULL)
@@ -606,7 +604,7 @@ static void printBgJob(pid_t jobPid)
       //If the process is running...
       else if (strncmp(bgJob->status, "Running\0", 8) == 0)
         //Print inforamatino with an "&" symbol
-        fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+        fprintf(stdout, "[%d]   %s                 %s &\n", bgJob->jobNumber,bgJob->status, bgJob->command);
       //Print the thing immediately
       fflush(stdout);
       //Exit the loop
@@ -628,7 +626,7 @@ static void PrintBgJobList()
     if (strncmp(bgJob->status, "Stopped\0", 8) == 0)
       fprintf(stdout, "[%d]   %s                 %s\n", bgJob->jobNumber,bgJob->status, bgJob->command);
     else if (strncmp(bgJob->status, "Running\0", 8) == 0)
-      fprintf(stdout, "[%d]   %s                 %s&\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+      fprintf(stdout, "[%d]   %s                 %s &\n", bgJob->jobNumber,bgJob->status, bgJob->command);
     fflush(stdout);
     bgJob = bgJob->next;
   }
@@ -642,11 +640,9 @@ static void AddBgJobToList(pid_t jobId, char* command)
   //Fill in PID for new background job
   newJob->pid = jobId;
   //Fill command text for new background job
-  newJob->command = malloc(strlen(command)+1);
-  strncpy(newJob->command, command, strlen(command)+1);
+  newJob->command = strdup(command);
   //Fill status text for new background job
-  newJob->status = malloc(strlen("Running\0")+1);
-  strncpy(newJob->status, "Running\0",strlen("Running\0")+1);
+  newJob->status = strdup("Running\0");
   //Fill in the job number for the new background job
   if (bgJobsTail !=  NULL)
     //Job number = one more than the last job number
@@ -778,10 +774,7 @@ static void changeBgJobStatus(pid_t jobId, char* status)
     {
       //Remove the current status
       if((bgJob)->status != NULL) free((bgJob)->status);
-      //Make space for the new status
-      bgJob->status = malloc(strlen(status)+1);
-      //Record the new status
-      strncpy(bgJob->status, status, strlen(status)+1);
+      bgJob->status = strdup(status);
       //Exit the loop
       break;
     }
