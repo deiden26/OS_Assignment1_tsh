@@ -249,7 +249,6 @@ static void Exec(commandT* cmd, bool forceFork)
   if (childPid == -1)
   {
     fprintf(stderr, "%s\n", "There was a fork error when executing your command");
-    fflush(stdout);
     exit(1);
   }
   //If the process that is running is the child, execute the comand
@@ -269,7 +268,6 @@ static void Exec(commandT* cmd, bool forceFork)
     execv(cmd->name,cmd->argv);
     //Notify user if there is an error (won't be called if execv works)
     fprintf(stderr, "%s\n", "command not found");
-    fflush(stdout);
     exit(0);
   }
   //If the process that is running is the parent...
