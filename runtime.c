@@ -76,9 +76,6 @@ typedef struct bgjob_l {
 bgJobL *bgJobsHead = NULL;
 bgJobL *bgJobsTail = NULL;
 
-// List of the background processes that have been freed but not notified
-bgJobL *bgJobsFreedHead = NULL;
-
 // The job in the foreground
 bgJobL *fgJob = NULL;
 
@@ -365,7 +362,7 @@ static void waitFg()
   while(waiting)
   {
     //Amount of time doesn't matter as long as it isn't tiny
-    sleep(100);
+    sleep(1);
   }
 }
 
@@ -378,7 +375,8 @@ static void sigchld_handler()
   //Check the status of all jobs and clean up jobs that are finished (waitpid does the cleaning)
    while ((childPid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
   {
-    //If the job has finished normally, finished due to being signaled, or stopped due to being signaled...
+    //If the job has 
+    //finished normally, finished due to being signaled, or stopped due to being signaled...
     if (WIFEXITED(status) || WIFSIGNALED(status) || WIFSTOPPED(status) )
     {
       //If the job is a foreground job
@@ -394,8 +392,6 @@ static void sigchld_handler()
       {
         //Change job's status to done
         changeBgJobStatus(childPid, "Done\0");
-        //Remove the finished job from the job list
-        //RemoveBgJobFromList(childPid);
       }
     }
   }
@@ -413,7 +409,7 @@ void stopFgProc()
     //Notify user that the job has been stopped
     printBgJob(fgJob->pid);
     //Stop it and all of its children
-    kill(-(fgJob->pid), SIGTSTP);
+    kill(-(fgJob->pid), SIGSTOP);
   } 
 }
 //ctrl-c signal handler (kills a foreground process if any)
@@ -426,29 +422,6 @@ void killFgProc()
     kill(-(fgJob->pid), SIGINT);
   } 
 }
-/*
-//Notifies user of jobs that were completed while foreground process was running
-void CheckJobs()
-{
-  //Initialize variables
-  bgJobL *job = bgJobsFreedHead; //Job to iterate over
-  bgJobL *delJob = NULL; //Job pointer for deletion
-  //While we aren't at the end of the list (and the list still has nodes)
-  while (job != NULL)
-  {
-    //Print notification that the job was completed
-    fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber, job->status, job->command);
-    fflush(stdout);
-    //Point to the job to delete
-    delJob = job;
-    //Move to the next job
-    job = job->next;
-    //delete the job that we just notified the user about
-    releaseBgJobL(&delJob);
-  }
-  bgJobsFreedHead = NULL;
-}
-*/
 
 //Notifies user of jobs that were completed and cleans background job list
 void CheckJobs()
@@ -521,6 +494,11 @@ static void continueBgJob(int jobNumber)
   //If the background job list isn't empty...
   if(bgJobsHead)
   {
+    //Block sigchld until job has been added to fgJob and removed from background job list
+    sigset_t x;
+    sigemptyset (&x);
+    sigaddset(&x, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &x, NULL);
     //If no job number was given, default to the most recently backgrounded job
     if (jobNumber == -1)
       jobNumber = bgJobsTail->jobNumber;
@@ -540,6 +518,7 @@ static void continueBgJob(int jobNumber)
       }
       bgJob = bgJob->next;
     }
+    sigprocmask(SIG_UNBLOCK, &x, NULL);
   }
 }
 
@@ -560,8 +539,15 @@ static void bringToForeground(int jobNumber)
       //If the bgJob is the job you're looking for...
       if (bgJob->jobNumber == jobNumber)
       {
-        //Tell job to continue working if it has been stopped
-        kill(bgJob->pid,SIGCONT);
+        //Block sigchld until job has been added to fgJob and removed from background job list
+        sigset_t x;
+        sigemptyset (&x);
+        sigaddset(&x, SIGCHLD);
+        sigprocmask(SIG_BLOCK, &x, NULL);
+        //If the job is currently stopeed...
+        if(strncmp(bgJob->status, "Stopped\0", 8) == 0)
+          //Tell job to continue working
+          kill(bgJob->pid,SIGCONT);
         //Record the job information in a bgJobL object in case it is interupted
         fgJob = createBgJobL();
         fgJob->command = malloc(strlen(bgJob->command)+1);
@@ -577,6 +563,8 @@ static void bringToForeground(int jobNumber)
         RemoveBgJobFromList(bgJob->pid);
         //wait for the job to finish
         waiting = TRUE;
+        //Unblock the sigchld
+        sigprocmask(SIG_UNBLOCK, &x, NULL);
         waitFg();
         //waiting variable set to false and fgJob is freed in sigchld_handler()
         //Exit the loop
@@ -696,24 +684,8 @@ static void RemoveBgJobFromList(pid_t jobId)
           //Remove the job to be delted from the list by making the node that points to it point to
           //the node after it
           prevJob->next = job->next;
-        //If we're waiting on a foreground process...
-        if(waiting)
-        {
-          //Add the job to the front of list of freed jobs
-          job->next = bgJobsFreedHead;
-          bgJobsFreedHead = job;
-        }
-        else
-        {
-          if (job->status != NULL)
-          {
-            //Notify user that the job is complete
-            fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber,job->status, job->command);
-            fflush(stdout);
-          }
-          //deallocate the memory the job node was using
-          releaseBgJobL(&job);
-        }
+        //deallocate the memory the job node was using
+        releaseBgJobL(&job);
         //Leave the while loop
         break;
       }
