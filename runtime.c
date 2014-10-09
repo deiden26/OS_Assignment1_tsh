@@ -157,12 +157,18 @@ void RunCmdPipe(commandT* cmd1, commandT* cmd2)
 {
 }
 
-void RunCmdRedirOut(commandT* cmd, char* file)
+void RedirOut(commandT* cmd, char* file)
 {
+    int out = open(file, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+    dup2(out, 1);
+    close(out);
 }
 
-void RunCmdRedirIn(commandT* cmd, char* file)
+void RedirIn(commandT* cmd, char* file)
 {
+    int in = open(file, O_RDONLY);
+    dup2(in, 0);
+    close(in);
 }
 
 
@@ -249,6 +255,12 @@ static void Exec(commandT* cmd, bool forceFork)
   //If the process that is running is the child, execute the comand
   else if (childPid == 0)
   {
+    if(cmd->redirect_in != NULL){
+      RedirIn(cmd, cmd->redirect_in);
+    }
+    if(cmd->redirect_out != NULL){
+      RedirOut(cmd, cmd->redirect_out);
+    }
     //Change the process group ID of the child to stop signals from affecting tsh
     setpgid(0,0);
     //Unblock sigchld signal
