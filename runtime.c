@@ -530,6 +530,19 @@ static void RunBuiltInCmd(commandT* cmd)
   {
     RemoveAlias(cmd->argv[1]);
   }
+  else if (strncmp(cmd->argv[0], "cd", 2) == 0)
+  {
+    int err;
+    //If a directory is given, go to that directory
+    if (cmd->argc == 2)
+      err = chdir(cmd->argv[1]);
+    //If a directory isn't given, go to the user's home directory
+    else
+      err = chdir(getenv("HOME"));
+    //If there was a problem changing directories, print an error
+    if (err == -1)
+      fprintf(stderr, "%s\n", "Invalid directory\n");
+  }
   //Print the list of background jobs (bgJobsHead)
   else if (strncmp(cmd->argv[0], "jobs", 4) == 0){
     PrintBgJobList();
