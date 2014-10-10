@@ -333,7 +333,7 @@ Binding* bindingsArray[MAX_ALIASES] = { };
 //Adds an alias to the alias array
 static void AddAlias(commandT* cmd){
 
-  fprintf(stdout, "%s is the cmdline\n", cmd->cmdline);
+  //fprintf(stdout, "%s is the cmdline\n", cmd->cmdline);
   fflush(stdout);
 
 
@@ -379,11 +379,11 @@ static void AddAlias(commandT* cmd){
   strncpy(newAlias, cmd->cmdline + indexStart, indexEqualSign - indexStart);
   strncpy(newCmd, cmd->cmdline + indexQuoteOpen + 1, indexQuoteClose - indexQuoteOpen - 1);
 
-  fprintf(stdout, "%s is the cmd\n", newCmd);
-  fflush(stdout);
+  //fprintf(stdout, "%s is the cmd\n", newCmd);
+  //fflush(stdout);
 
-  fprintf(stdout, "%s is the alias\n", newAlias);
-  fflush(stdout);
+  //fprintf(stdout, "%s is the alias\n", newAlias);
+  //fflush(stdout);
 
 
 
@@ -398,8 +398,8 @@ static void AddAlias(commandT* cmd){
 
       bindingsArray[j] = newBinding;
 
-      fprintf(stdout, " stored at %d\n", j);
-      fflush(stdout);
+      //fprintf(stdout, " stored at %d\n", j);
+      //fflush(stdout);
 
       break;
 
@@ -422,8 +422,8 @@ static void RemoveAlias(char* alias){
         free(bindingsArray[j]);
         bindingsArray[j] = NULL; //setis back to 0
 
-      fprintf(stdout, " removed at %d\n", j);
-      fflush(stdout);
+      //fprintf(stdout, " removed at %d\n", j);
+      //fflush(stdout);
 
       }
     } 
@@ -432,6 +432,15 @@ static void RemoveAlias(char* alias){
 }
 
 static void PrintAliases(){
+  int j = 0;
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL){
+
+      fprintf(stdout, "alias  %s='%s'\n", bindingsArray[j]->alias, bindingsArray[j]->cmd);
+      fflush(stdout);
+    }
+    j++;
+  }
 
 
 }
