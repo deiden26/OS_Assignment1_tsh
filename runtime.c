@@ -431,16 +431,60 @@ static void RemoveAlias(char* alias){
   }
 }
 
+/* qsort C-string comparison function */ 
+int cstring_cmp(const void *a, const void *b) 
+{ 
+
+    const char **ia = (const char **)a;
+    const char **ib = (const char **)b;
+    return strcmp(*ia, *ib);
+  /* strcmp functions works exactly as expected from
+  comparison function */ 
+} 
+
 static void PrintAliases(){
+
+  //figure out how much data to allocate for the sorted data
+  int numAliases = 0;
   int j = 0;
   while(j < MAX_ALIASES){
-    if(bindingsArray[j] != NULL){
+    if(bindingsArray[j] != NULL)
+      numAliases++;
+    j++;
+  }
 
-      fprintf(stdout, "alias  %s='%s'\n", bindingsArray[j]->alias, bindingsArray[j]->cmd);
-      fflush(stdout);
+  //allocate the array
+  char* bindingsArrayCopy[numAliases];
+
+  //add data to it
+  j = 0;
+  int last = 0;
+  char str[numAliases][800];
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL){
+      
+      strcpy (str[last], "alias ");
+      strcat (str[last], bindingsArray[j]->alias);
+      strcat (str[last], "='");
+      strcat (str[last], bindingsArray[j]->cmd);
+      strcat (str[last], "'\n");
+
+      bindingsArrayCopy[last] = str[last];
+      last++;
     }
     j++;
   }
+
+  qsort(bindingsArrayCopy, numAliases, sizeof(char *) , cstring_cmp);
+
+  //print it out
+  j = 0;
+  while(j < numAliases){
+    fprintf(stdout, "%s", bindingsArrayCopy[j] );
+    fflush(stdout);
+    j++;
+  }
+
 
 
 }

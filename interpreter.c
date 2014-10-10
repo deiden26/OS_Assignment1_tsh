@@ -201,11 +201,39 @@ void Interpret(char* cmdLine,bool secondRun)
   }
   parser_single(&(cmdLine[i-j]), j, &(command[task]),bg);
 
+  //
+  // TILDE EXPANSION
+  //
+  bool changed = FALSE;
+  int idx =0;
+    //look through all the args
+  while(idx < command[0]->argc){
+      //special case for "unalias x". ie dont expand x
+    if(command[0]->argv[idx][0] == '~'){
+
+      char* home = getenv("HOME");
+
+          //get the part after the tilde and add it to home
+      strcat(home,(command[0]->argv[idx])+2);
+      command[0]->argv[idx] = home;
+      changed = TRUE;
+
+    }
+    idx++;
+  }
+
+
+
+
+  //
+  // ALIAS
+  //
+
+
   //only expand aliases on the first run to stop aliases from recrusively expanding
   if(!secondRun){
 
     //look for aliases
-    bool changed = FALSE; //true if there is an alias
     int idx =0;
     //look through all the args
     while(idx < command[0]->argc){
@@ -215,6 +243,7 @@ void Interpret(char* cmdLine,bool secondRun)
         if(IsAlias(command[0]->argv[idx])){
           (command[0]->argv)[idx] = GetAliasCmd(command[0]->argv[idx]);
           changed = TRUE;
+        //check for tilde expansion
         }
       }
       idx++;
