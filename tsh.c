@@ -88,7 +88,7 @@ int main (int argc, char *argv[])
     
     /* interpret command and line
      * includes executing of commands */
-    Interpret(cmdLine);
+    Interpret(cmdLine, FALSE);
 
   }
 

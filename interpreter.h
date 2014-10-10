@@ -57,7 +57,7 @@
  *    Input: a command line 
  *    Output: void
  ***********************************************************************/
-EXTERN void Interpret(char*);
+EXTERN void Interpret(char*,bool);
 
 /************External Declaration*****************************************/
 

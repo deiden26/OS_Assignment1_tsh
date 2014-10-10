@@ -308,7 +308,10 @@ static bool IsBuiltIn(char* cmd)
 
   else if (strncmp(cmd, "fg", 2) == 0) 
     return TRUE;
-
+  else if (strncmp(cmd, "alias", 5) == 0) 
+    return TRUE;
+  else if (strncmp(cmd, "unalias", 7) == 0) 
+    return TRUE;
   else if (strncmp(cmd, "jobs", 4) == 0)
     return TRUE;
   else if (strncmp(cmd, "cd", 2) == 0)
@@ -316,6 +319,155 @@ static bool IsBuiltIn(char* cmd)
   //Otherwise it isn't (return false)
   else
     return FALSE;
+}
+
+typedef struct binding_l{
+  char* cmd;
+  char* alias;
+} Binding;
+
+//support up to 100 aliases
+#define MAX_ALIASES 100
+Binding* bindingsArray[MAX_ALIASES] = { };
+
+//Adds an alias to the alias array
+static void AddAlias(commandT* cmd){
+
+  fprintf(stdout, "%s is the cmdline\n", cmd->cmdline);
+  fflush(stdout);
+
+
+  //parse out the command to alias and the alias itself
+  //getthe indexes
+  int indexStart =0;
+  int indexQuoteClose = 0;
+  int indexQuoteOpen = 0;
+  int indexEqualSign = 0;
+
+  int length = strlen(cmd->cmdline);
+  int idx = 0;
+  while(idx < length){
+
+    if(cmd->cmdline[idx] == ' ' && indexStart==0)
+      indexStart = idx + 1;
+
+    if(cmd->cmdline[idx] == '\''){
+
+      if(indexQuoteOpen == 0)
+        indexQuoteOpen = idx;
+      else
+        indexQuoteClose = idx;
+
+    }
+    if(cmd->cmdline[idx] == '='){
+
+      indexEqualSign = idx;
+
+    }
+    idx++;
+  }
+
+  //use the indexes to copy to a new string
+
+  //allocate newbinding
+  Binding *newBinding = (Binding*)malloc(sizeof(Binding));
+  char* newAlias = (char*) malloc(indexEqualSign + 1);
+  char* newCmd = (char*) malloc(indexQuoteClose - indexQuoteOpen + 1);
+
+  //copy contents
+  //strncpy(dest, src + beginIndex, endIndex - beginIndex);
+  strncpy(newAlias, cmd->cmdline + indexStart, indexEqualSign - indexStart);
+  strncpy(newCmd, cmd->cmdline + indexQuoteOpen + 1, indexQuoteClose - indexQuoteOpen - 1);
+
+  fprintf(stdout, "%s is the cmd\n", newCmd);
+  fflush(stdout);
+
+  fprintf(stdout, "%s is the alias\n", newAlias);
+  fflush(stdout);
+
+
+
+  //add it to the struct
+  newBinding->cmd = newCmd;
+  newBinding->alias = newAlias;
+
+  //allocate it to an opening
+  int j = 0;
+  while( j < MAX_ALIASES){
+    if(bindingsArray[j] == NULL){
+
+      bindingsArray[j] = newBinding;
+
+      fprintf(stdout, " stored at %d\n", j);
+      fflush(stdout);
+
+      break;
+
+    }
+    j++;
+  }
+
+}
+
+//removes alias from alias array
+static void RemoveAlias(char* alias){
+  int j = 0;
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL){
+      if( strcmp(bindingsArray[j]-> alias , alias ) == 0){
+
+        free(bindingsArray[j]->cmd);
+        free(bindingsArray[j]->alias);
+
+        free(bindingsArray[j]);
+        bindingsArray[j] = NULL; //setis back to 0
+
+      fprintf(stdout, " removed at %d\n", j);
+      fflush(stdout);
+
+      }
+    } 
+    j++;
+  }
+}
+
+static void PrintAliases(){
+
+
+}
+
+//Test to see if this command is an alias
+bool IsAlias(char* alias){
+  int j = 0;
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL){
+      if( strcmp(bindingsArray[j]-> alias , alias ) == 0){
+
+        return TRUE;
+
+      }
+    }
+    j++;
+  }
+
+  return FALSE;
+
+}
+
+char* GetAliasCmd(char* alias){
+  int j = 0;
+  while(j < MAX_ALIASES){
+    if( strcmp(bindingsArray[j]-> alias , alias ) == 0){
+
+      return bindingsArray[j]-> cmd;
+
+    }
+
+    j++;
+  }
+
+  return NULL;
+
 }
 
 //Run commands that are built-in shell functions
@@ -353,10 +505,26 @@ static void RunBuiltInCmd(commandT* cmd)
       fprintf(stderr, "Too many arguments were given with fg.\n");
     }
   }
+  //makenew alias 
+  else if (strncmp(cmd->argv[0], "alias", 5) == 0)
+  {
+    //If there are two arguments in the command...
+    if (cmd->argc == 2)
+      //make new binding
+      AddAlias(cmd);
+    //show all bindings
+    else if (cmd->argc == 1)
+      PrintAliases();
+
+  }
+  else if (strncmp(cmd->argv[0], "unalias", 7) == 0)
+  {
+    RemoveAlias(cmd->argv[1]);
+  }
   //Print the list of background jobs (bgJobsHead)
-  else if (strncmp(cmd->argv[0], "jobs", 4) == 0)
+  else if (strncmp(cmd->argv[0], "jobs", 4) == 0){
     PrintBgJobList();
-  
+  } 
   else
   {
     fprintf(stderr, "%s is an unrecognized internal command\n", cmd->argv[0]);

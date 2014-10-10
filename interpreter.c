@@ -132,9 +132,12 @@ void parser_single(char *c, int sz, commandT** cd, int bg)
 }
 
 
+
+
 /**************Implementation***********************************************/
 /*Parse the whole command line and split commands if a piped command is sent.*/
-void Interpret(char* cmdLine)
+//bool secondRun stops the interpreter from recursing more than 1 level into itself
+void Interpret(char* cmdLine,bool secondRun)
 {
   int task = 1;
   int bg = 0, i,k,j = 0, quotation1 = 0, quotation2 = 0;
@@ -198,6 +201,60 @@ void Interpret(char* cmdLine)
   }
   parser_single(&(cmdLine[i-j]), j, &(command[task]),bg);
 
-  RunCmd(command, task+1);
-  free(command);
+  //only expand aliases on the first run to stop aliases from recrusively expanding
+  if(!secondRun){
+
+    //look for aliases
+    bool changed = FALSE; //true if there is an alias
+    int idx =0;
+    //look through all the args
+    while(idx < command[0]->argc){
+      //special case for "unalias x". ie dont expand x
+      if(strcmp(command[0]->argv[0],"unalias") != 0) 
+      {
+        if(IsAlias(command[0]->argv[idx])){
+          (command[0]->argv)[idx] = GetAliasCmd(command[0]->argv[idx]);
+          changed = TRUE;
+        }
+      }
+      idx++;
+    }
+
+    //if we expanded something
+    if(changed){
+
+      int newSize = 0;//the new size of the expanded command line
+
+      //figure out the new size
+      int idx2 =0;
+      while(idx2 < command[0]->argc){
+        newSize = newSize + strlen(command[0]->argv[idx2]) + 1;
+        idx2++;
+      }
+
+      //copy all ths args to a new cmdLine string
+      char newCmdLine[newSize + 1];
+      strcpy (newCmdLine, command[0]->argv[0]);
+
+      int idx3 =1;
+      while(idx3 < command[0]->argc){
+        strcat(newCmdLine," ");//add space between args
+        strcat(newCmdLine,command[0]->argv[idx3]);
+        idx3++;
+      }
+
+      //rerun the interpreter
+      Interpret(newCmdLine,TRUE);
+
+
+    }
+    else{
+      RunCmd(command, task+1);
+      free(command);
+    }
+
+  }else{
+    RunCmd(command, task+1);
+    free(command);
+  }
 }

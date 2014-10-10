@@ -93,6 +93,10 @@ EXTERN void RunCmd(commandT**,int);
  ***********************************************************************/
 EXTERN void RunCmdBg(commandT*);
 
+EXTERN bool IsAlias(char*);
+
+EXTERN char* GetAliasCmd(char *);
+
 /***********************************************************************
  *  Title: Runs two command with a pipe
  * ---------------------------------------------------------------------
