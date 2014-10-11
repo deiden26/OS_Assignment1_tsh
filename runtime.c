@@ -982,6 +982,7 @@ static bgJobL* createBgJobL()
   bgJobL *newJob = malloc(sizeof(bgJobL));
   newJob->command = NULL;
   newJob->status = NULL;
+  newJob->next = NULL;
   return newJob;
 }
 //Release and collect the space of a bgJobL struct
