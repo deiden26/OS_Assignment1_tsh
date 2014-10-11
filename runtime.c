@@ -117,20 +117,38 @@ static void releaseBgJobL(bgJobL **jobToDelete);
 static void changeBgJobStatus(pid_t jobId, char* status);
 /* Wait for foreground process to finish */
 static void waitFg();
+/* Get input from a file instead of stdin */
+static void RedirIn(commandT* cmd, char* file);
+/* Put output in a file instead of stdout */
+static void RedirOut(commandT* cmd, char* file);
+/* Add an alias to the alias array */
+static void AddAlias(commandT* cmd);
+/* removes alias from alias array */
+static void RemoveAlias(char* alias);
+/* Get the command associated with an alias */
+char* GetAliasCmd(char* alias);
+/* Test to see if this command is an alias */
+bool IsAlias(char* alias);
+/* Print the list of aliases */
+static void PrintAliases();
+/* qsort C-string comparison function */ 
+int cstring_cmp(const void *a, const void *b);
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
+
+//////////////////////////////////////////////////////////////
+//  New Command Handlers
+//////////////////////////////////////////////////////////////
+
 int total_task;
 void RunCmd(commandT** cmd, int n)
 {
-  int i;
   total_task = n;
   if(n == 1)
     RunCmdFork(cmd[0], TRUE);
   else{
-    RunCmdPipe(cmd[0], cmd[1]);
-    for(i = 0; i < n; i++)
-      ReleaseCmdT(&cmd[i]);
+    fprintf(stderr, "%s\n", "Pipes were not implemented");
   }
 }
 
@@ -148,29 +166,9 @@ void RunCmdFork(commandT* cmd, bool fork)
   }
 }
 
-void RunCmdBg(commandT* cmd)
-{
-  // TODO
-}
-
-void RunCmdPipe(commandT* cmd1, commandT* cmd2)
-{
-}
-
-void RedirOut(commandT* cmd, char* file)
-{
-    int out = open(file, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
-    dup2(out, 1);
-    close(out);
-}
-
-void RedirIn(commandT* cmd, char* file)
-{
-    int in = open(file, O_RDONLY);
-    dup2(in, 0);
-    close(in);
-}
-
+//////////////////////////////////////////////////////////////
+//  Run External Command
+//////////////////////////////////////////////////////////////
 
 /*Try to run an external command*/
 static void RunExternalCmd(commandT* cmd, bool fork)
@@ -299,6 +297,21 @@ static void Exec(commandT* cmd, bool forceFork)
   }
 }
 
+//Wait for a foreground process to terminate
+static void waitFg()
+{
+  //Waiting will be set to false once foreground process terminates
+  while(waiting)
+  {
+    //Amount of time doesn't matter as long as it isn't tiny
+    sleep(1);
+  }
+}
+
+//////////////////////////////////////////////////////////////
+//  Run Built-In Command
+//////////////////////////////////////////////////////////////
+
 //Test to see if command needs to be executed by the shell itself
 static bool IsBuiltIn(char* cmd)
 {
@@ -319,208 +332,6 @@ static bool IsBuiltIn(char* cmd)
   //Otherwise it isn't (return false)
   else
     return FALSE;
-}
-
-typedef struct binding_l{
-  char* cmd;
-  char* alias;
-} Binding;
-
-//support up to 100 aliases
-#define MAX_ALIASES 100
-Binding* bindingsArray[MAX_ALIASES] = { };
-
-//Adds an alias to the alias array
-static void AddAlias(commandT* cmd){
-
-  //fprintf(stdout, "%s is the cmdline\n", cmd->cmdline);
-  fflush(stdout);
-
-
-  //parse out the command to alias and the alias itself
-  //getthe indexes
-  int indexStart =0;
-  int indexQuoteClose = 0;
-  int indexQuoteOpen = 0;
-  int indexEqualSign = 0;
-
-  int length = strlen(cmd->cmdline);
-  int idx = 0;
-  while(idx < length){
-
-    if(cmd->cmdline[idx] == ' ' && indexStart==0)
-      indexStart = idx + 1;
-
-    if(cmd->cmdline[idx] == '\''){
-
-      if(indexQuoteOpen == 0)
-        indexQuoteOpen = idx;
-      else
-        indexQuoteClose = idx;
-
-    }
-    if(cmd->cmdline[idx] == '='){
-
-      indexEqualSign = idx;
-
-    }
-    idx++;
-  }
-
-  //use the indexes to copy to a new string
-
-  //allocate newbinding
-  Binding *newBinding = (Binding*)malloc(sizeof(Binding));
-  char* newAlias = (char*) malloc(indexEqualSign + 1);
-  char* newCmd = (char*) malloc(indexQuoteClose - indexQuoteOpen + 1);
-
-  //copy contents
-  //strncpy(dest, src + beginIndex, endIndex - beginIndex);
-  strncpy(newAlias, cmd->cmdline + indexStart, indexEqualSign - indexStart);
-  strncpy(newCmd, cmd->cmdline + indexQuoteOpen + 1, indexQuoteClose - indexQuoteOpen - 1);
-
-  //fprintf(stdout, "%s is the cmd\n", newCmd);
-  //fflush(stdout);
-
-  //fprintf(stdout, "%s is the alias\n", newAlias);
-  //fflush(stdout);
-
-
-
-  //add it to the struct
-  newBinding->cmd = newCmd;
-  newBinding->alias = newAlias;
-
-  //allocate it to an opening
-  int j = 0;
-  while( j < MAX_ALIASES){
-    if(bindingsArray[j] == NULL){
-
-      bindingsArray[j] = newBinding;
-
-      //fprintf(stdout, " stored at %d\n", j);
-      //fflush(stdout);
-
-      break;
-
-    }
-    j++;
-  }
-
-}
-
-//removes alias from alias array
-static void RemoveAlias(char* alias){
-  int j = 0;
-  while(j < MAX_ALIASES){
-    if(bindingsArray[j] != NULL){
-      if( strcmp(bindingsArray[j]-> alias , alias ) == 0){
-
-        free(bindingsArray[j]->cmd);
-        free(bindingsArray[j]->alias);
-
-        free(bindingsArray[j]);
-        bindingsArray[j] = NULL; //setis back to 0
-
-      //fprintf(stdout, " removed at %d\n", j);
-      //fflush(stdout);
-
-      }
-    } 
-    j++;
-  }
-}
-
-/* qsort C-string comparison function */ 
-int cstring_cmp(const void *a, const void *b) 
-{ 
-
-    const char **ia = (const char **)a;
-    const char **ib = (const char **)b;
-    return strcmp(*ia, *ib);
-  /* strcmp functions works exactly as expected from
-  comparison function */ 
-} 
-
-static void PrintAliases(){
-
-  //figure out how much data to allocate for the sorted data
-  int numAliases = 0;
-  int j = 0;
-  while(j < MAX_ALIASES){
-    if(bindingsArray[j] != NULL)
-      numAliases++;
-    j++;
-  }
-
-  //allocate the array
-  char* bindingsArrayCopy[numAliases];
-
-  //add data to it
-  j = 0;
-  int last = 0;
-  char str[numAliases][800];
-  while(j < MAX_ALIASES){
-    if(bindingsArray[j] != NULL){
-      
-      strcpy (str[last], "alias ");
-      strcat (str[last], bindingsArray[j]->alias);
-      strcat (str[last], "='");
-      strcat (str[last], bindingsArray[j]->cmd);
-      strcat (str[last], "'\n");
-
-      bindingsArrayCopy[last] = str[last];
-      last++;
-    }
-    j++;
-  }
-
-  qsort(bindingsArrayCopy, numAliases, sizeof(char *) , cstring_cmp);
-
-  //print it out
-  j = 0;
-  while(j < numAliases){
-    fprintf(stdout, "%s", bindingsArrayCopy[j] );
-    fflush(stdout);
-    j++;
-  }
-
-
-
-}
-
-//Test to see if this command is an alias
-bool IsAlias(char* alias){
-  int j = 0;
-  while(j < MAX_ALIASES){
-    if(bindingsArray[j] != NULL){
-      if( strcmp(bindingsArray[j]-> alias , alias ) == 0){
-
-        return TRUE;
-
-      }
-    }
-    j++;
-  }
-
-  return FALSE;
-
-}
-
-char* GetAliasCmd(char* alias){
-  int j = 0;
-  while(j < MAX_ALIASES){
-    if( strcmp(bindingsArray[j]-> alias , alias ) == 0){
-
-      return bindingsArray[j]-> cmd;
-
-    }
-
-    j++;
-  }
-
-  return NULL;
-
 }
 
 //Run commands that are built-in shell functions
@@ -598,137 +409,25 @@ static void RunBuiltInCmd(commandT* cmd)
   }
 }
 
-//Wait for a foreground process to terminate
-static void waitFg()
-{
-  //Waiting will be set to false once foreground process terminates
-  while(waiting)
-  {
-    //Amount of time doesn't matter as long as it isn't tiny
-    sleep(1);
-  }
-}
+//////////////////////////////////////////////////////////////
+//  Internal Commmand Handlers
+//////////////////////////////////////////////////////////////
 
-// Catch signials from child processes and reap zombie processes
-static void sigchld_handler()
-{
-  //Initialize variables
-  pid_t childPid;
-  int status = 0;
-  //Check the status of all jobs and clean up jobs that are finished (waitpid does the cleaning)
-   while ((childPid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
-  {
-    //If the job has 
-    //finished normally, finished due to being signaled, or stopped due to being signaled...
-    if (WIFEXITED(status) || WIFSIGNALED(status) || WIFSTOPPED(status) )
-    {
-      //If the job is a foreground job
-      if(fgJob != NULL && fgJob->pid == childPid)
-      {
-        //Set waiting to false to escape loop in waitFg()
-        waiting = FALSE;
-        //Free the bgJobL object associated with foreground processes
-        if(fgJob != NULL) releaseBgJobL(&fgJob);
-      }
-      //If the job is a background job
-      else
-      {
-        //Change job's status to done
-        changeBgJobStatus(childPid, "Done\0");
-      }
-    }
-  }
-}
-//ctrl-z signal handler (stops a foreground process if any)
-void stopFgProc()
-{
-  //If there is a foreground process...
-  if (fgJob != NULL)
-  {
-    //Add it to the background job list
-    AddBgJobToList(fgJob->pid, fgJob->command);
-    //Change it's status in the job list to "stopped"
-    changeBgJobStatus(fgJob->pid, "Stopped\0");
-    //Notify user that the job has been stopped
-    printBgJob(fgJob->pid);
-    //Stop it and all of its children
-    kill(-(fgJob->pid), SIGSTOP);
-  } 
-}
-//ctrl-c signal handler (kills a foreground process if any)
-void killFgProc()
-{
-  //If tehre is a foreground process...
-  if (fgJob != NULL)
-  {
-    //Kill it and all of its children
-    kill(-(fgJob->pid), SIGINT);
-  } 
-}
-
-//Notifies user of jobs that were completed and cleans background job list
-void CheckJobs()
-{
-  //Initialize variables
-  bgJobL *job = bgJobsHead; //This is the leading pointer
-  bgJobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
-  bgJobL *jobToDel = NULL; //Job pointer for deletion
-  //While we aren't at the end of the list (and the list still has nodes)
-  while (job != NULL)
-  {
-    if (strncmp(job->status, "Done\0", 5) == 0)
-    {
-      //Print notification that the job was completed
-      fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber, job->status, job->command);
-      fflush(stdout);
-      
-      //If the job to be deleted is the tail of the linked list...
-        if (job == bgJobsTail)
-          //Set the tail to the job before the one to be deleted
-          bgJobsTail = prevJob;
-        //If the job to be deleted is the head of the linked list...
-        if (job == bgJobsHead)
-          //Make the head of the linked list point to the next node
-          bgJobsHead = job->next;
-
-        //If the job to be deleted is in the middle or at the end of the linked list...
-        else
-          //Remove the job to be delted from the list by making the node that points to it point to
-          //the node after it
-          prevJob->next = job->next;
-
-        //Move to the next node
-        jobToDel = job;
-        job = job->next;
-        //deallocate the memory the job node was using
-        releaseBgJobL(&jobToDel);
-    }
-    else
-    {
-      //set the traling pointer to the leading pointer
-      prevJob = job;
-      //set the leading pointer to the next node
-      job = job->next;
-    }
-  }
-}
-
-//Kills all background processes if any before exiting
-void cleanExit()
+//Print the list of background jobs (bgJobsHead)
+static void PrintBgJobList()
 {
   //Initialize variables
   bgJobL *bgJob = bgJobsHead;
-  bgJobL *jobToDel = NULL;
-  //Iterate through linked list, kill every background job, and free every node
+  //Iterate through linked list and print the job number, status, and command in every node
   while (bgJob != NULL)
   {
-    kill(-(bgJob->pid), SIGINT);
-    jobToDel = bgJob;
+    if (strncmp(bgJob->status, "Stopped\0", 8) == 0)
+      fprintf(stdout, "[%d]   %s                 %s\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+    else if (strncmp(bgJob->status, "Running\0", 8) == 0)
+      fprintf(stdout, "[%d]   %s                 %s &\n", bgJob->jobNumber,bgJob->status, bgJob->command);
+    fflush(stdout);
     bgJob = bgJob->next;
-    releaseBgJobL(&jobToDel);
   }
-  bgJobsHead = NULL;
-  bgJobsTail = NULL;
 }
 
 //Send sigcont signal to background job
@@ -818,6 +517,349 @@ static void bringToForeground(int jobNumber)
   }
 }
 
+
+//////////////////////////////////////////////////////////////
+//  Alias Code (Internal Commmand)
+//////////////////////////////////////////////////////////////
+
+typedef struct binding_l{
+  char* cmd;
+  char* alias;
+} Binding;
+
+//support up to 100 aliases
+#define MAX_ALIASES 100
+Binding* bindingsArray[MAX_ALIASES] = { };
+
+//Adds an alias to the alias array
+static void AddAlias(commandT* cmd)
+{
+
+  //fprintf(stdout, "%s is the cmdline\n", cmd->cmdline);
+  fflush(stdout);
+
+
+  //parse out the command to alias and the alias itself
+  //getthe indexes
+  int indexStart =0;
+  int indexQuoteClose = 0;
+  int indexQuoteOpen = 0;
+  int indexEqualSign = 0;
+
+  int length = strlen(cmd->cmdline);
+  int idx = 0;
+  while(idx < length){
+
+    if(cmd->cmdline[idx] == ' ' && indexStart==0)
+      indexStart = idx + 1;
+
+    if(cmd->cmdline[idx] == '\''){
+
+      if(indexQuoteOpen == 0)
+        indexQuoteOpen = idx;
+      else
+        indexQuoteClose = idx;
+
+    }
+    if(cmd->cmdline[idx] == '='){
+
+      indexEqualSign = idx;
+
+    }
+    idx++;
+  }
+
+  //use the indexes to copy to a new string
+
+  //allocate newbinding
+  Binding *newBinding = (Binding*)malloc(sizeof(Binding));
+  char* newAlias = (char*) malloc(indexEqualSign + 1);
+  char* newCmd = (char*) malloc(indexQuoteClose - indexQuoteOpen + 1);
+
+  //copy contents
+  //strncpy(dest, src + beginIndex, endIndex - beginIndex);
+  strncpy(newAlias, cmd->cmdline + indexStart, indexEqualSign - indexStart);
+  strncpy(newCmd, cmd->cmdline + indexQuoteOpen + 1, indexQuoteClose - indexQuoteOpen - 1);
+
+  //add it to the struct
+  newBinding->cmd = newCmd;
+  newBinding->alias = newAlias;
+
+  //allocate it to an opening
+  int j = 0;
+  while( j < MAX_ALIASES)
+  {
+    if(bindingsArray[j] == NULL)
+    {
+      bindingsArray[j] = newBinding;
+      break;
+    }
+    j++;
+  }
+}
+
+//removes alias from alias array
+static void RemoveAlias(char* alias)
+{
+  int j = 0;
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL)
+    {
+      if( strcmp(bindingsArray[j]-> alias , alias ) == 0)
+      {
+
+        free(bindingsArray[j]->cmd);
+        free(bindingsArray[j]->alias);
+
+        free(bindingsArray[j]);
+        bindingsArray[j] = NULL; //setis back to 0
+      }
+    } 
+    j++;
+  }
+}
+
+/* qsort C-string comparison function */ 
+int cstring_cmp(const void *a, const void *b) 
+{ 
+
+    const char **ia = (const char **)a;
+    const char **ib = (const char **)b;
+    return strcmp(*ia, *ib);
+  /* strcmp functions works exactly as expected from
+  comparison function */ 
+} 
+
+static void PrintAliases()
+{
+
+  //figure out how much data to allocate for the sorted data
+  int numAliases = 0;
+  int j = 0;
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL)
+      numAliases++;
+    j++;
+  }
+
+  //allocate the array
+  char* bindingsArrayCopy[numAliases];
+
+  //add data to it
+  j = 0;
+  int last = 0;
+  char str[numAliases][800];
+  while(j < MAX_ALIASES){
+    if(bindingsArray[j] != NULL)
+    {
+      
+      strcpy (str[last], "alias ");
+      strcat (str[last], bindingsArray[j]->alias);
+      strcat (str[last], "='");
+      strcat (str[last], bindingsArray[j]->cmd);
+      strcat (str[last], "'\n");
+
+      bindingsArrayCopy[last] = str[last];
+      last++;
+    }
+    j++;
+  }
+
+  qsort(bindingsArrayCopy, numAliases, sizeof(char *) , cstring_cmp);
+
+  //print it out
+  j = 0;
+  while(j < numAliases){
+    fprintf(stdout, "%s", bindingsArrayCopy[j] );
+    fflush(stdout);
+    j++;
+  }
+}
+
+//Test to see if this command is an alias
+bool IsAlias(char* alias)
+{
+  int j = 0;
+  while(j < MAX_ALIASES)
+  {
+    if(bindingsArray[j] != NULL)
+    {
+      if( strcmp(bindingsArray[j]-> alias , alias ) == 0)
+        return TRUE;
+    }
+    j++;
+  }
+  return FALSE;
+}
+
+char* GetAliasCmd(char* alias)
+{
+  int j = 0;
+  while(j < MAX_ALIASES)
+  {
+    if( strcmp(bindingsArray[j]-> alias , alias ) == 0)
+      return bindingsArray[j]-> cmd;
+
+    j++;
+  }
+  return NULL;
+}
+
+
+//////////////////////////////////////////////////////////////
+//  Signal Handlers
+//////////////////////////////////////////////////////////////
+
+// Catch signials from child processes and reap zombie processes
+static void sigchld_handler()
+{
+  //Initialize variables
+  pid_t childPid;
+  int status = 0;
+  //Check the status of all jobs and clean up jobs that are finished (waitpid does the cleaning)
+   while ((childPid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
+  {
+    //If the job has 
+    //finished normally, finished due to being signaled, or stopped due to being signaled...
+    if (WIFEXITED(status) || WIFSIGNALED(status) || WIFSTOPPED(status) )
+    {
+      //If the job is a foreground job
+      if(fgJob != NULL && fgJob->pid == childPid)
+      {
+        //Set waiting to false to escape loop in waitFg()
+        waiting = FALSE;
+        //Free the bgJobL object associated with foreground processes
+        if(fgJob != NULL) releaseBgJobL(&fgJob);
+      }
+      //If the job is a background job
+      else
+      {
+        //Change job's status to done
+        changeBgJobStatus(childPid, "Done\0");
+      }
+    }
+  }
+}
+
+//ctrl-z signal handler (stops a foreground process if any)
+void stopFgProc()
+{
+  //If there is a foreground process...
+  if (fgJob != NULL)
+  {
+    //Add it to the background job list
+    AddBgJobToList(fgJob->pid, fgJob->command);
+    //Change it's status in the job list to "stopped"
+    changeBgJobStatus(fgJob->pid, "Stopped\0");
+    //Notify user that the job has been stopped
+    printBgJob(fgJob->pid);
+    //Stop it and all of its children
+    kill(-(fgJob->pid), SIGSTOP);
+  } 
+}
+//ctrl-c signal handler (kills a foreground process if any)
+void killFgProc()
+{
+  //If tehre is a foreground process...
+  if (fgJob != NULL)
+  {
+    //Kill it and all of its children
+    kill(-(fgJob->pid), SIGINT);
+  } 
+}
+
+//////////////////////////////////////////////////////////////
+//  I/O Redirection
+//////////////////////////////////////////////////////////////
+
+static void RedirOut(commandT* cmd, char* file)
+{
+    int out = open(file, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+    dup2(out, 1);
+    close(out);
+}
+
+static void RedirIn(commandT* cmd, char* file)
+{
+    int in = open(file, O_RDONLY);
+    dup2(in, 0);
+    close(in);
+}
+
+
+//////////////////////////////////////////////////////////////
+//  Support Functions
+//////////////////////////////////////////////////////////////
+
+//Notifies user of jobs that were completed and cleans background job list
+void CheckJobs()
+{
+  //Initialize variables
+  bgJobL *job = bgJobsHead; //This is the leading pointer
+  bgJobL *prevJob = NULL; //This is the trailing pointer (one node behind leading)
+  bgJobL *jobToDel = NULL; //Job pointer for deletion
+  //While we aren't at the end of the list (and the list still has nodes)
+  while (job != NULL)
+  {
+    if (strncmp(job->status, "Done\0", 5) == 0)
+    {
+      //Print notification that the job was completed
+      fprintf(stdout, "[%d]   %s                    %s\n",job->jobNumber, job->status, job->command);
+      fflush(stdout);
+      
+      //If the job to be deleted is the tail of the linked list...
+        if (job == bgJobsTail)
+          //Set the tail to the job before the one to be deleted
+          bgJobsTail = prevJob;
+        //If the job to be deleted is the head of the linked list...
+        if (job == bgJobsHead)
+          //Make the head of the linked list point to the next node
+          bgJobsHead = job->next;
+
+        //If the job to be deleted is in the middle or at the end of the linked list...
+        else
+          //Remove the job to be delted from the list by making the node that points to it point to
+          //the node after it
+          prevJob->next = job->next;
+
+        //Move to the next node
+        jobToDel = job;
+        job = job->next;
+        //deallocate the memory the job node was using
+        releaseBgJobL(&jobToDel);
+    }
+    else
+    {
+      //set the traling pointer to the leading pointer
+      prevJob = job;
+      //set the leading pointer to the next node
+      job = job->next;
+    }
+  }
+}
+
+//Kills all background processes if any before exiting
+void cleanExit()
+{
+  //Initialize variables
+  bgJobL *bgJob = bgJobsHead;
+  bgJobL *jobToDel = NULL;
+  //Iterate through linked list, kill every background job, and free every node
+  while (bgJob != NULL)
+  {
+    kill(-(bgJob->pid), SIGINT);
+    jobToDel = bgJob;
+    bgJob = bgJob->next;
+    releaseBgJobL(&jobToDel);
+  }
+  bgJobsHead = NULL;
+  bgJobsTail = NULL;
+}
+
+//////////////////////////////////////////////////////////////
+//  Pure Background Job List Functions
+//////////////////////////////////////////////////////////////
+
 //Print a particular background job
 static void printBgJob(pid_t jobPid)
 {
@@ -847,22 +889,6 @@ static void printBgJob(pid_t jobPid)
   }
 }
 
-//Print the list of background jobs (bgJobsHead)
-static void PrintBgJobList()
-{
-  //Initialize variables
-  bgJobL *bgJob = bgJobsHead;
-  //Iterate through linked list and print the job number, status, and command in every node
-  while (bgJob != NULL)
-  {
-    if (strncmp(bgJob->status, "Stopped\0", 8) == 0)
-      fprintf(stdout, "[%d]   %s                 %s\n", bgJob->jobNumber,bgJob->status, bgJob->command);
-    else if (strncmp(bgJob->status, "Running\0", 8) == 0)
-      fprintf(stdout, "[%d]   %s                 %s &\n", bgJob->jobNumber,bgJob->status, bgJob->command);
-    fflush(stdout);
-    bgJob = bgJob->next;
-  }
-}
 //Add new background job to the end of the background jobs list (bgJobsTail)
 static void AddBgJobToList(pid_t jobId, char* command)
 {
